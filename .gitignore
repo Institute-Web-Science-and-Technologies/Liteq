@@ -1,0 +1,6 @@
+ConsoleTestForLiteQ/bin/
+ConsoleTestForLiteQ/obj/
+LiteqTypeProvider/bin/
+LiteqTypeProvider/obj/
+**/*.sln
+**/*.suo
