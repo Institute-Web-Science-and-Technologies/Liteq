@@ -1,2 +1,4 @@
-Liteq
+LITEQ
 =====
+
+Personal version of LITEQ
