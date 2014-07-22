@@ -128,3 +128,21 @@ type XMLFileStore(filePath:string) as __ = class
                     select (prop.Element(rdfs "range").Attribute(rdf "resource").Value)
             } |> Seq.exactlyOne  
 end
+
+
+type Uri = string
+
+type Edge = class
+    member __.ID : string = ""
+    member __.StartsFrom : Node = new Node()
+    member __.PointsTo : Node list = []
+end 
+and Node() = class
+    member __.Properties = new Dictionary<string,Edge>()
+    member __.ID : Uri = ""
+    member __.SubclassOf =
+        try
+            __.Properties.["subClassOf"].PointsTo
+        with
+            _ -> []
+end

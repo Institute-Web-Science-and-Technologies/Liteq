@@ -68,12 +68,6 @@ type SesameStore(serverUri:string) = class
             GROUP BY ?class ?range ?domain
         """)
 
-        let results' = 
-            (Map.empty<string,string>
-                .Add("class","http://dbpedia.org/property/euseats")
-                .Add("range", "http://www.w3.org/2001/XMLSchema#int")
-                .Add("domain", "http://purl.org/ontology/mo/MusicArtist")) :: results
-
         (results) 
         |> List.filter( fun binding ->
             not (classesFilter.Contains(binding.["class"]) || binding.["class"].StartsWith("node") || binding.["class"].StartsWith("http://www.w3.org/2000/01/rdf-schema#") )

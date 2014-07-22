@@ -23,11 +23,19 @@ let internal mapToTriple (graph : Graph) ((s, p, o) : ValueType * ValueType * Va
     new Triple(s.makeNode graph, p.makeNode graph, o.makeNode graph)
 
 let internal extractClassesFromStore (connection : SparqlRemoteEndpoint) (graph : Graph) = 
-    let query = "SELECT DISTINCT ?c WHERE { {?c a <http://www.w3.org/2000/01/rdf-schema#Class> .} UNION { ?x a ?c . } }"
+    let query = "SELECT DISTINCT ?c WHERE
+        {
+            {?c a <http://www.w3.org/2000/01/rdf-schema#Class> .}
+            UNION { ?x a ?c . }
+            UNION { ?c <http://www.w3.org/2000/01/rdf-schema#subClassOf> ?y . }
+            UNION { ?z <http://www.w3.org/2000/01/rdf-schema#subClassOf> ?c . }
+            UNION { ?w <http://www.w3.org/2000/01/rdf-schema#domain> ?c . }
+        }"
     let o = "http://www.w3.org/2000/01/rdf-schema#Class"
     let p = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-    connection.QueryWithResultSet(query)
-    |> Seq.map (map1Var "c")
+    let l = connection.QueryWithResultSet(query) |> Seq.map (map1Var "c")
+    printfn "%A" (l |> Seq.length)
+    l
     |> Seq.filter isNoBlankNode
     |> Seq.map (fun x -> URI x, URI p, URI o)
     |> Seq.map (mapToTriple graph)
@@ -78,13 +86,17 @@ let internal extractCommentsRelations (connection : SparqlRemoteEndpoint) (graph
     |> Seq.map (fun (s, o) -> URI s, URI p, LITERAL o)
     |> Seq.map (mapToTriple graph)
 
+let internal handleSpecialCases (graph : Graph) = ()
+
 // Funktioniert 👍
-let internal composeGraph (connection : SparqlRemoteEndpoint) = 
+let internal composeGraph (connection : SparqlRemoteEndpoint) (path : string) = 
     let graph = new Graph()
     [ extractClassesFromStore; extractPropertiesFromStore; extractSubClassRelations; extractDomainRelations; 
       extractRangeRelations; extractCommentsRelations ] 
     |> Seq.iter (fun f -> f connection graph |> Seq.iter (fun t -> (graph.Assert t) |> ignore))
-    (new RdfXmlWriter()).Save(graph, @"C:\Users\Martin\Documents\test.rdf")
+    handleSpecialCases graph
+    (new RdfXmlWriter()).Save(graph, path)
 
 //let connection = 
 //    new SparqlRemoteEndpoint(new Uri("http://stardog.west.uni-koblenz.de:8080/openrdf-sesame/repositories/Jamendo"))
+//let path = @"C:\Users\Martin\Documents\test.rdf"
