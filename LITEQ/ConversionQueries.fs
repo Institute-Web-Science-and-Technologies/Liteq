@@ -7,6 +7,7 @@ open System
 open VDS.RDF.Query
 open VDS.RDF.Writing
 open VDS.RDF
+open VDS.RDF.Storage
 
 type ValueType = 
     | URI of string
@@ -33,9 +34,7 @@ let internal extractClassesFromStore (connection : SparqlRemoteEndpoint) (graph 
         }"
     let o = "http://www.w3.org/2000/01/rdf-schema#Class"
     let p = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-    let l = connection.QueryWithResultSet(query) |> Seq.map (map1Var "c")
-    printfn "%A" (l |> Seq.length)
-    l
+    connection.QueryWithResultSet(query) |> Seq.map (map1Var "c")
     |> Seq.filter isNoBlankNode
     |> Seq.map (fun x -> URI x, URI p, URI o)
     |> Seq.map (mapToTriple graph)
@@ -97,6 +96,8 @@ let internal composeGraph (connection : SparqlRemoteEndpoint) (path : string) =
     handleSpecialCases graph
     (new RdfXmlWriter()).Save(graph, path)
 
-//let connection = 
-//    new SparqlRemoteEndpoint(new Uri("http://stardog.west.uni-koblenz.de:8080/openrdf-sesame/repositories/Jamendo"))
+//let connection =
+    //SesameHttpProtocolConnector("http://stardog.west.uni-koblenz.de:8080/openrdf-sesame","Jamendo")
+    //new SparqlRemoteEndpoint(new Uri("http://stardog.west.uni-koblenz.de:8080/openrdf-sesame/repositories/Jamendo"))
+
 //let path = @"C:\Users\Martin\Documents\test.rdf"

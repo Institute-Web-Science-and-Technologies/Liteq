@@ -5,20 +5,15 @@ open Microsoft.FSharp.Collections
 open ProviderImplementation.ProvidedTypes
 open System.Reflection
 open SomeName
-open Wrapper
 open Configuration
+open WrapperReimplemented
+open VDS.RDF.Query
 
 [<TypeProvider>]
 type TypeProvider(config : TypeProviderConfig) as this = 
     class
         inherit TypeProviderForNamespaces()
-        
-        let duration f = 
-            let timer = new System.Diagnostics.Stopwatch()
-            timer.Start()
-            let returnValue = f()
-            printfn "Elapsed Time: %i" timer.ElapsedMilliseconds
-            returnValue
+
         
         let mutable conf : (string * string) list option = None
         let ns = "Uniko.Liteq"
@@ -44,22 +39,21 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                              
                                              let p = 
                                                  ProvidedProperty
-                                                     (propertyName = propertyName, 
-                                                      
+                                                     (propertyName = propertyName,       
                                                       propertyType = typedefof<seq<_>>
                                                           .MakeGenericType(typeCache.[propertyRange 
                                                                                       + "Intension"]), 
                                                       
                                                       GetterCode = fun args -> 
-                                                          <@@ let wrapper = (%%args.[0] : obj) :?> RDFWrapper
+                                                          <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
                                                               wrapper.[propertyUri] 
                                                               |> List.map 
                                                                      (fun uri -> 
-                                                                     new RDFWrapper(uri, storeName')) @@>)
+                                                                     new RdfResourceWrapper(uri, storeName')) @@>)
                                              if not isReadOnly then 
                                                  p.SetterCode <- fun args -> 
-                                                     <@@ let wrapper = (%%args.[0] : obj) :?> RDFWrapper
-                                                         let value = (%%args.[1] : list<RDFWrapper>)
+                                                     <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
+                                                         let value = (%%args.[1] : list<RdfResourceWrapper>)
                                                          wrapper.[propertyUri] <- (value 
                                                                                    |> List.map 
                                                                                           (fun x -> 
@@ -78,11 +72,11 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                                           .MakeGenericType(typeof<string>), 
                                                                       GetterCode = fun args -> 
                                                                           <@@ let wrapper = 
-                                                                                  (%%args.[0] : obj) :?> RDFWrapper
+                                                                                  (%%args.[0] : obj) :?> RdfResourceWrapper
                                                                               wrapper.[propertyUri] @@>)
                                                  if not isReadOnly then 
                                                      p.SetterCode <- fun args -> 
-                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RDFWrapper
+                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
                                                              let value = (%%args.[1] : list<string>)
                                                              wrapper.[propertyUri] <- value @@>
                                                  p.AddXmlDoc comment
@@ -97,12 +91,12 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                           
                                                           GetterCode = fun args -> 
                                                               <@@ let wrapper = 
-                                                                      (%%args.[0] : obj) :?> RDFWrapper
+                                                                      (%%args.[0] : obj) :?> RdfResourceWrapper
                                                                   wrapper.[propertyUri] 
                                                                   |> List.map (fun value -> int (value)) @@>)
                                                  if not isReadOnly then 
                                                      p.SetterCode <- fun args -> 
-                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RDFWrapper
+                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
                                                              let value = (%%args.[1] : list<int>)
                                                              wrapper.[propertyUri] <- (value 
                                                                                        |> List.map 
@@ -119,12 +113,12 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                           
                                                           GetterCode = fun args -> 
                                                               <@@ let wrapper = 
-                                                                      (%%args.[0] : obj) :?> RDFWrapper
+                                                                      (%%args.[0] : obj) :?> RdfResourceWrapper
                                                                   wrapper.[propertyUri] 
                                                                   |> List.map (fun value -> decimal (value)) @@>)
                                                  if not isReadOnly then 
                                                      p.SetterCode <- fun args -> 
-                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RDFWrapper
+                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
                                                              let value = (%%args.[1] : list<decimal>)
                                                              wrapper.[propertyUri] <- (value 
                                                                                        |> List.map 
@@ -135,18 +129,17 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                  let p = 
                                                      ProvidedProperty
                                                          (propertyName = propertyName, 
-                                                          
                                                           propertyType = typedefof<list<_>>
                                                               .MakeGenericType(typeof<float>), 
                                                           
                                                           GetterCode = fun args -> 
                                                               <@@ let wrapper = 
-                                                                      (%%args.[0] : obj) :?> RDFWrapper
+                                                                      (%%args.[0] : obj) :?> RdfResourceWrapper
                                                                   wrapper.[propertyUri] 
                                                                   |> List.map (fun value -> float (value)) @@>)
                                                  if not isReadOnly then 
                                                      p.SetterCode <- fun args -> 
-                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RDFWrapper
+                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
                                                              let value = (%%args.[1] : list<float>)
                                                              wrapper.[propertyUri] <- (value 
                                                                                        |> List.map 
@@ -162,8 +155,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                            (parameterName = "instanceUri", 
                                                             parameterType = typeof<string>) ], 
                                         InvokeCode = fun args -> 
-                                            <@@ RDFWrapper.AddRepository storeName'
-                                                new RDFWrapper((%%args.[0] : string), storeName', typeUri) @@>)
+                                            <@@ new RdfResourceWrapper((%%args.[0] : string), storeName', typeUri) @@>)
             (constr :> MemberInfo) :: properties
         
         let buildPropertyNavigation (typeUri : string) = 
@@ -263,7 +255,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                    <@@ let u, v, triples = 
                                            (%%args.[0] : obj) :?> string * string * (string * string * string) list
                                        let u' = u + "x"
-                                       u', v, (u', "rdf:type", "<" + propertyRange + ">") :: triples @@>) ]
+                                       u', v, (u', "a", "<" + propertyRange + ">") :: triples @@>) ]
         
         let buildTypes (typeName : string) (args : obj []) = 
             let configFilePath = args.[0] :?> string
@@ -272,12 +264,12 @@ type TypeProvider(config : TypeProviderConfig) as this =
                 Configuration.initConf configFilePath
                 storeName <- Configuration.findConfVal ("serverUri")
                 isReadOnly <- bool.Parse(Configuration.findConfVal ("isReadOnly"))
-                if Configuration.hasConfVal ("schemaFile") then 
-                    store <- Some(XMLFileStore(Configuration.findConfVal ("schemaFile")) :> IStore) //
-                else store <- Some(new SesameStore(storeName) :> IStore)
-            //            RDFWrapper.AddRepository storeName (serverUri, repository)
+                if not(System.IO.File.Exists (Configuration.findConfVal "schemaFile") ) then
+                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeName)) (Configuration.findConfVal "schemaFile") 
+                store <- Some(LocalSchema.LocalSchema(Configuration.findConfVal ("schemaFile")) :> IStore)
+
             let s = store.Value
-            let isReadOnly' = isReadOnly
+            let isReadOnly' = true
             let t = ProvidedTypeDefinition(className = typeName, baseType = Some typeof<obj>)
             provTy.AddMember t
             t.AddMember
@@ -314,8 +306,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                   
                                                   let query = 
                                                       "SELECT " + u + " WHERE {\n" + patternsString + "}"
-                                                  Wrapper.RDFWrapper.AddRepository storeName'
-                                                  Wrapper.QueryForInstances u query storeName' @@>)
+                                                  WrapperReimplemented.QueryForInstances u query storeName' @@>)
                                  //let intension' = ProvidedProperty(propertyName="Intension'", propertyType=factoryThingy)
                                  extension.AddXmlDoc "Returns all instances that satisfy the query"
                                  typeDef.AddMembers [ extension :> MemberInfo
@@ -341,7 +332,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                           GetterCode = fun args -> 
                                               <@@ let u, v, triples = 
                                                       (%%args.[0] : obj) :?> string * string * (string * string * string) list
-                                                  u, v, (u, "rdf:type", "<" + typeUri + ">") :: triples @@>))
+                                                  u, v, (u, "a", "<" + typeUri + ">") :: triples @@>))
                 typeCache.Add("http://www.w3.org/2000/01/rdf-schema#Literal", literal)
                 typeNames.Add("http://www.w3.org/2000/01/rdf-schema#Literal", "Literal")
                 typeCache.Add("http://www.w3.org/2001/XMLSchema#int", literal)
@@ -370,8 +361,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                  propertyType = typedefof<seq<_>>.MakeGenericType(tupleDef), //typeCache.[domain], typeCache.[range]),//propertyType=typeof<string>,
                                                                                                              
                                                  GetterCode = fun args -> 
-                                                     <@@ //                                        [new RDFWrapper("http://dbtune.org/jamendo/artist/1003", storeName'):>System.Object,
-                                                         //                                         new RDFWrapper("http://dbtune.org/jamendo/artist/1003", storeName'):>System.Object]
+                                                     <@@ 
                                                          let u, v, triples = 
                                                              (%%args.[0] : obj) :?> string * string * (string * string * string) list
                                                          
@@ -386,8 +376,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                          let query = 
                                                              "SELECT " + u + " " + u' + " WHERE {\n" 
                                                              + patternsString + "}"
-                                                         Wrapper.RDFWrapper.AddRepository storeName'
-                                                         Wrapper.QueryForTuples (u, u') query storeName' @@>)
+                                                         WrapperReimplemented.QueryForTuples (u, u') query storeName' @@>)
                                         extension.AddXmlDoc "Returns all instances that satisfy the query"
                                         typeDef.AddMembers [ extension ]
                                     typeCache.Add(propertyUri, typeDef)
@@ -398,7 +387,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
         let parameters = 
             [ ProvidedStaticParameter("configurationFile", typeof<string>, "./liteq_default.ini") ]
         do provTy.DefineStaticParameters(parameters, buildTypes)
-        do this.AddNamespace(ns, [ provTy; easterEgg ])
+        do this.AddNamespace(ns, [ provTy; easterEgg ])  
     end
 
 [<TypeProviderAssembly>]

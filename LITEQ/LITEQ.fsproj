@@ -57,6 +57,7 @@
     <Compile Include="ProvidedTypes\Code\ProvidedTypes.fs" />
     <Compile Include="ProvidedTypes\Code\Debug.fs" />
     <Compile Include="Configuration.fs" />
+    <Compile Include="WrapperReimplemented.fs" />
     <Compile Include="Sesame.fs" />
     <Compile Include="ConversionQueries.fs" />
     <Compile Include="StoreInterface.fs" />
