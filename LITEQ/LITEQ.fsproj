@@ -58,14 +58,9 @@
     <Compile Include="ProvidedTypes\Code\Debug.fs" />
     <Compile Include="Configuration.fs" />
     <Compile Include="WrapperReimplemented.fs" />
-    <Compile Include="Sesame.fs" />
     <Compile Include="ConversionQueries.fs" />
     <Compile Include="StoreInterface.fs" />
-    <Compile Include="SesameStore.fs" />
     <Compile Include="LocalSchema.fs" />
-    <Compile Include="XmlGeneration.fs" />
-    <Compile Include="XMLFileStore.fs" />
-    <Compile Include="Wrapper.fs" />
     <Compile Include="TypeMapper.fs" />
     <Compile Include="Provider.fs" />
     <None Include="packages.config" />
