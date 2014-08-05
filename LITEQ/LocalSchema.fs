@@ -1,16 +1,33 @@
-﻿module LocalSchema
+﻿module Schema
 
-open LITEQ
 open System
 open VDS.RDF.Query
 open VDS.RDF.Parsing
 open VDS.RDF
+open Configuration
 
 // Funktioniert 👍
+type IStore = 
+    /// <summary>Returns a list of all classes with their label and comment</summary>
+    abstract member Classes: (string*string*string) list
+    /// <summary>Returns a list of all properties with their label, comment, domain and range</summary>
+    abstract member Properties: (string*string*string*string*string) list
+    /// <summary>Takes a type URI and returns a list containing property URI, label, comment and range</summary>
+    /// <param name=typeUri>The URI of the type</param>
+    abstract member PropertiesForType: string -> (string*string*string*string) list
+    /// <summary>Takes a class URI and returns a list containing class URIs and labels</summary>
+    /// <param name="typeUri">The URI of the type</param >
+    abstract member SubclassesForType: string -> (string*string) list
+    /// <summary>Takes a property URI and returns the range URI</summary>
+    /// <param name=propertyUri>The URI of the property</param>
+    abstract member RangeForProperty: string -> string
+
 type LocalSchema(path : string) = 
     class
         let graph = new Graph()
-        let mutable namespaces = List.empty<string*string>
+        let namespaces = Configuration.prefixes
+        let niceName = NameUtils.uniqueGenerator NameUtils.niceCamelName
+        let logger = new Logger.Logger(Configuration.findConfVal KEY_LOG_LEVEL |> int)
 
         let makeComment (r : SparqlResult) = 
             if r.HasValue("comment") && not (r.["comment"].ToString() = "") then 
@@ -24,18 +41,23 @@ type LocalSchema(path : string) =
                 match ns with
                 | (prefix,u) :: tail ->
                     if uri.StartsWith u
-                        then uri.Replace(u,prefix)
+                        then niceName (uri.Replace(u,prefix+":"))
                         else f uri tail
                 | [] -> uri    
             f uri namespaces
         
         do 
-            let parser = new RdfXmlParser()
-            parser.Load(graph, path)
-            namespaces <-
-                graph.NamespaceMap.Prefixes
-                |> Seq.map(fun prefix -> prefix, (graph.NamespaceMap.GetNamespaceUri prefix).ToString() )            
-                |> Seq.toList            
+            try 
+                let parser = new RdfXmlParser()
+                parser.Load(graph, path)
+            with 
+                | _ ->
+                    
+                    failwith "Failed to parse the previously created schema file"
+//            namespaces <-
+//                graph.NamespaceMap.Prefixes
+//                |> Seq.map(fun prefix -> prefix, (graph.NamespaceMap.GetNamespaceUri prefix).ToString() )            
+//                |> Seq.toList            
 
         interface IStore with
             
@@ -70,10 +92,16 @@ type LocalSchema(path : string) =
             
             member __.PropertiesForType typeUri = 
                 let query = "SELECT DISTINCT ?uri ?comment ?range WHERE {
-                    @type <http://www.w3.org/2000/01/rdf-schema#subClassOf>* ?class .
-                    ?uri <http://www.w3.org/2000/01/rdf-schema#domain> ?class .
-                    ?uri <http://www.w3.org/2000/01/rdf-schema#range> ?range .
-                    OPTIONAL { ?uri <http://www.w3.org/2000/01/rdf-schema#comment> ?comment . }
+                    {
+                        @type <http://www.w3.org/2000/01/rdf-schema#subClassOf>* ?class .
+                        ?uri <http://www.w3.org/2000/01/rdf-schema#domain> ?class .
+                        ?uri <http://www.w3.org/2000/01/rdf-schema#range> ?range .
+                        OPTIONAL { ?uri <http://www.w3.org/2000/01/rdf-schema#comment> ?comment . }
+                    } UNION {
+                        ?uri <http://www.w3.org/2000/01/rdf-schema#domain> <http://www.w3.org/2002/07/owl#Thing> .
+                        ?uri <http://www.w3.org/2000/01/rdf-schema#range> ?range .
+                        OPTIONAL { ?uri <http://www.w3.org/2000/01/rdf-schema#comment> ?comment . }
+                    }
                 }"
                 let parameterizedQuery = new SparqlParameterizedString(query)
                 parameterizedQuery.SetUri("type", Uri typeUri)

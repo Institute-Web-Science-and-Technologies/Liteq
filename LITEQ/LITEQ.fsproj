@@ -56,6 +56,8 @@
     <Compile Include="ProvidedTypes\Signatures\ProvidedTypes.fsi" />
     <Compile Include="ProvidedTypes\Code\ProvidedTypes.fs" />
     <Compile Include="ProvidedTypes\Code\Debug.fs" />
+    <Compile Include="Logger.fs" />
+    <Compile Include="NameUtils.fs" />
     <Compile Include="Configuration.fs" />
     <Compile Include="WrapperReimplemented.fs" />
     <Compile Include="ConversionQueries.fs" />

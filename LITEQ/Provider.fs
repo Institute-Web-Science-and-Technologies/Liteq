@@ -4,158 +4,72 @@ open Microsoft.FSharp.Core.CompilerServices
 open Microsoft.FSharp.Collections
 open ProviderImplementation.ProvidedTypes
 open System.Reflection
-open SomeName
+open VDS.RDF.Query
+
+open Schema
 open Configuration
 open WrapperReimplemented
-open VDS.RDF.Query
 
 [<TypeProvider>]
 type TypeProvider(config : TypeProviderConfig) as this = 
     class
         inherit TypeProviderForNamespaces()
 
-        
-        let mutable conf : (string * string) list option = None
         let ns = "Uniko.Liteq"
         let asm = Assembly.GetExecutingAssembly()
         let provTy = ProvidedTypeDefinition(asm, ns, "RDFStore", Some typeof<obj>)
-        let easterEgg = ProvidedTypeDefinition(asm, ns, "Temporary classes", None)
-        //TODO: nach buildTypes verschieben (storeabhängig)
+
+        let temporaryClasses = ProvidedTypeDefinition(asm, ns, "Temporary classes", None)
         let typeCache = System.Collections.Generic.Dictionary<string, ProvidedTypeDefinition>()
         let typeNames = System.Collections.Generic.Dictionary<string, string>()
-        let mutable storeName = ""
+        let mutable storeUri = ""
+        let mutable updateUri = ""
         let mutable store = None
         
         let buildIntension (typeUri : string) (isReadOnly : bool) = 
             let store' : IStore = store.Value
             let propertiesForType = store'.PropertiesForType typeUri
-            
+            let storeUri' = storeUri
+            let updateUri' = updateUri     
+                   
             let properties = 
-                propertiesForType |> List.map (fun (propertyUri, propertyName, comment, propertyRange) -> 
-                                         if not (TypeMapper.isPrimitive propertyRange) 
-                                            && typeCache.ContainsKey propertyRange // Complex type
-                                                                                   then 
-                                             let storeName' = storeName
-                                             
-                                             let p = 
-                                                 ProvidedProperty
-                                                     (propertyName = propertyName,       
-                                                      propertyType = typedefof<seq<_>>
-                                                          .MakeGenericType(typeCache.[propertyRange 
-                                                                                      + "Intension"]), 
-                                                      
-                                                      GetterCode = fun args -> 
-                                                          <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                              wrapper.[propertyUri] 
-                                                              |> List.map 
-                                                                     (fun uri -> 
-                                                                     new RdfResourceWrapper(uri, storeName')) @@>)
-                                             if not isReadOnly then 
-                                                 p.SetterCode <- fun args -> 
-                                                     <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                         let value = (%%args.[1] : list<RdfResourceWrapper>)
-                                                         wrapper.[propertyUri] <- (value 
-                                                                                   |> List.map 
-                                                                                          (fun x -> 
-                                                                                          x.InstanceUri)) @@>
-                                             p.AddXmlDoc comment
-                                             p :> MemberInfo
-                                         // Primitive type
-                                         else 
-                                             let propTypeName, _ = TypeMapper.mapPrimitiveType propertyRange
-                                             match propTypeName with
-                                             | "string" -> 
-                                                 let p = 
-                                                     ProvidedProperty(propertyName = propertyName, 
-                                                                      
-                                                                      propertyType = typedefof<list<_>>
-                                                                          .MakeGenericType(typeof<string>), 
-                                                                      GetterCode = fun args -> 
-                                                                          <@@ let wrapper = 
-                                                                                  (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                                              wrapper.[propertyUri] @@>)
-                                                 if not isReadOnly then 
-                                                     p.SetterCode <- fun args -> 
-                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                             let value = (%%args.[1] : list<string>)
-                                                             wrapper.[propertyUri] <- value @@>
-                                                 p.AddXmlDoc comment
-                                                 p :> MemberInfo
-                                             | "integer" -> 
-                                                 let p = 
-                                                     ProvidedProperty
-                                                         (propertyName = propertyName, 
-                                                          
-                                                          propertyType = typedefof<list<_>>
-                                                              .MakeGenericType(typeof<int>), 
-                                                          
-                                                          GetterCode = fun args -> 
-                                                              <@@ let wrapper = 
-                                                                      (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                                  wrapper.[propertyUri] 
-                                                                  |> List.map (fun value -> int (value)) @@>)
-                                                 if not isReadOnly then 
-                                                     p.SetterCode <- fun args -> 
-                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                             let value = (%%args.[1] : list<int>)
-                                                             wrapper.[propertyUri] <- (value 
-                                                                                       |> List.map 
-                                                                                              (fun x -> 
-                                                                                              string (x))) @@>
-                                                 p :> MemberInfo
-                                             | "decimal" -> 
-                                                 let p = 
-                                                     ProvidedProperty
-                                                         (propertyName = propertyName, 
-                                                          
-                                                          propertyType = typedefof<list<_>>
-                                                              .MakeGenericType(typeof<decimal>), 
-                                                          
-                                                          GetterCode = fun args -> 
-                                                              <@@ let wrapper = 
-                                                                      (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                                  wrapper.[propertyUri] 
-                                                                  |> List.map (fun value -> decimal (value)) @@>)
-                                                 if not isReadOnly then 
-                                                     p.SetterCode <- fun args -> 
-                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                             let value = (%%args.[1] : list<decimal>)
-                                                             wrapper.[propertyUri] <- (value 
-                                                                                       |> List.map 
-                                                                                              (fun x -> 
-                                                                                              string (x))) @@>
-                                                 p :> MemberInfo
-                                             | "float" -> 
-                                                 let p = 
-                                                     ProvidedProperty
-                                                         (propertyName = propertyName, 
-                                                          propertyType = typedefof<list<_>>
-                                                              .MakeGenericType(typeof<float>), 
-                                                          
-                                                          GetterCode = fun args -> 
-                                                              <@@ let wrapper = 
-                                                                      (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                                  wrapper.[propertyUri] 
-                                                                  |> List.map (fun value -> float (value)) @@>)
-                                                 if not isReadOnly then 
-                                                     p.SetterCode <- fun args -> 
-                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
-                                                             let value = (%%args.[1] : list<float>)
-                                                             wrapper.[propertyUri] <- (value 
-                                                                                       |> List.map 
-                                                                                              (fun x -> 
-                                                                                              string (x))) @@>
-                                                 p :> MemberInfo
-                                             | _ -> failwith "Undefined mapping")
-            
-            let storeName' = storeName
-            
+                propertiesForType
+                |> List.map (fun (propertyUri, propertyName, comment, propertyRange) ->     
+                                if typeCache.ContainsKey (propertyRange+"Intension")
+                                    then 
+                                        let t = typeCache.[propertyRange + "Intension"]
+                                        let p = ProvidedProperty(propertyName, typedefof<list<_>>.MakeGenericType(t))
+                                        p.GetterCode <- fun args -> 
+                                                    <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
+                                                        (accessProperty wrapper propertyUri) :?> string list
+                                                        |> List.map 
+                                                                (fun uri -> 
+                                                                WrapperReimplemented.createInstance uri storeUri' updateUri' ) @@> // new RdfResourceWrapper(uri, storeUri', None)) @@>)
+                                        if not isReadOnly then
+                                            p.SetterCode <- fun args ->
+                                                        <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
+                                                            let value = (%%args.[1] : obj list)
+                                                            value
+                                                            |> List.map( fun x -> (x:?>RdfResourceWrapper).InstanceUri)
+                                                            |> (setProperty wrapper propertyUri) @@>
+                                        
+                                        p.AddXmlDoc comment
+                                        p :> MemberInfo
+                                else
+                                    let t, getter, setter = TypeMapper.mapPrimitive propertyUri propertyRange
+                                    let p = ProvidedProperty(propertyName, typedefof<list<_>>.MakeGenericType(t))
+                                    p.GetterCode <- getter
+                                    if not isReadOnly then
+                                        p.SetterCode <- setter              
+                                    p.AddXmlDoc comment
+                                    p :> MemberInfo )                
+                         
             let constr = 
                 new ProvidedConstructor(parameters = [ ProvidedParameter
                                                            (parameterName = "instanceUri", 
                                                             parameterType = typeof<string>) ], 
                                         InvokeCode = fun args -> 
-                                            <@@ new RdfResourceWrapper((%%args.[0] : string), storeName', typeUri) @@>)
+                                            <@@ createInstanceWithType (%%args.[0] : string) storeUri' typeUri updateUri' @@>)
             (constr :> MemberInfo) :: properties
         
         let buildPropertyNavigation (typeUri : string) = 
@@ -180,8 +94,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                      p :> MemberInfo)
         
         let buildPropertyRestricitons (typeUri : string) = 
-            let store' : IStore = store.Value
-            let propertiesForType = store'.PropertiesForType typeUri
+            let propertiesForType = store.Value.PropertiesForType typeUri
             propertiesForType 
             |> List.map 
                    (fun (propertyUri, propertyName, comment, propertyRange) -> 
@@ -193,8 +106,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                             u, v', (u, "<" + propertyUri + ">", v) :: triples @@>) :> MemberInfo)
         
         let buildSubclassNavigation (typeUri : string) = 
-            let store' : IStore = store.Value
-            let subClassesForType = store'.SubclassesForType typeUri
+            let subClassesForType = store.Value.SubclassesForType typeUri
             subClassesForType |> List.map (fun (subClassUri, comment) -> 
                                      let p = 
                                          ProvidedProperty
@@ -217,7 +129,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                 ProvidedProperty
                     (propertyName = "->", propertyType = propNavigationType, 
                      GetterCode = fun args -> <@@ %%args.[0] @@>)
-            easterEgg.AddMember propNavigationType
+            temporaryClasses.AddMember propNavigationType
             propNavigationType.AddMembersDelayed(fun _ -> buildPropertyNavigation typeUri)
             // Build property restriction
             let propRestrictionType = ProvidedTypeDefinition(typeUri + "PropRes", baseType = None)
@@ -225,7 +137,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                 ProvidedProperty
                     (propertyName = "<-", propertyType = propRestrictionType, 
                      GetterCode = fun args -> <@@ %%args.[0] @@>)
-            easterEgg.AddMember propRestrictionType
+            temporaryClasses.AddMember propRestrictionType
             propRestrictionType.AddMembersDelayed(fun _ -> buildPropertyRestricitons typeUri)
             // Build subclass navigation
             let subClassNavigationType = 
@@ -234,7 +146,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                 ProvidedProperty
                     (propertyName = "v", propertyType = subClassNavigationType, 
                      GetterCode = fun args -> <@@ %%args.[0] @@>)
-            easterEgg.AddMember subClassNavigationType
+            temporaryClasses.AddMember subClassNavigationType
             subClassNavigationType.AddMembersDelayed(fun _ -> buildSubclassNavigation typeUri)
             [ subClassNavigationMethod :> MemberInfo
               propNavigationMethod :> MemberInfo
@@ -245,9 +157,9 @@ type TypeProvider(config : TypeProviderConfig) as this =
             let propertyRange = store'.RangeForProperty propertyUri
             
             let propertyRange' = 
-                if TypeMapper.isPrimitive propertyRange || not (typeCache.ContainsKey propertyRange) then 
-                    "http://www.w3.org/2000/01/rdf-schema#Literal"
-                else propertyRange
+                if not (typeCache.ContainsKey propertyRange)
+                    then "http://www.w3.org/2000/01/rdf-schema#Literal"
+                    else propertyRange
             
             let typeName = typeNames.[propertyRange']
             [ ProvidedProperty(propertyName = typeName, propertyType = typeCache.[propertyRange'], 
@@ -259,23 +171,26 @@ type TypeProvider(config : TypeProviderConfig) as this =
         
         let buildTypes (typeName : string) (args : obj []) = 
             let configFilePath = args.[0] :?> string
-            let mutable isReadOnly = true
             if store.IsNone then 
                 Configuration.initConf configFilePath
-                storeName <- Configuration.findConfVal ("serverUri")
-                isReadOnly <- bool.Parse(Configuration.findConfVal ("isReadOnly"))
-                if not(System.IO.File.Exists (Configuration.findConfVal "schemaFile") ) then
-                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeName)) (Configuration.findConfVal "schemaFile") 
-                store <- Some(LocalSchema.LocalSchema(Configuration.findConfVal ("schemaFile")) :> IStore)
+                let x = System.IO.Path.GetFullPath(configFilePath)
+                storeUri <- Configuration.findConfVal KEY_SERVER_URI
+                if Configuration.hasConfVal KEY_UPDATE_URI then
+                    updateUri <- Configuration.findConfVal KEY_UPDATE_URI
+                if not(System.IO.File.Exists (Configuration.findConfVal KEY_SCHEMA_FILE) ) then
+                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) Configuration.prefixes (Configuration.findConfVal "schemaFile") 
+                store <- Some(Schema.LocalSchema(Configuration.findConfVal KEY_SCHEMA_FILE) :> IStore)
 
             let s = store.Value
-            let isReadOnly' = true
+            let isReadOnly = (updateUri = "")
             let t = ProvidedTypeDefinition(className = typeName, baseType = Some typeof<obj>)
             provTy.AddMember t
+            
+
             t.AddMember
                 (ProvidedProperty
                      (propertyName = "IsReadOnly", propertyType = typeof<bool>, IsStatic = true, 
-                      GetterCode = fun _ -> <@@ isReadOnly' @@>))
+                      GetterCode = fun _ -> <@@ isReadOnly @@>))
             // Build types from store
             t.AddMembersDelayed(fun _ -> 
                 s.Classes |> List.map (fun (typeUri, typeName, comment) -> 
@@ -287,8 +202,8 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                  let intension = 
                                      ProvidedTypeDefinition
                                          (className = "Intension", baseType = Some typeof<obj>)
-                                 intension.AddMembersDelayed(fun _ -> buildIntension typeUri isReadOnly')
-                                 let storeName' = storeName
+                                 intension.AddMembersDelayed(fun _ -> buildIntension typeUri isReadOnly)
+                                 let storeName' = storeUri
                                  
                                  let extension = 
                                      ProvidedProperty
@@ -353,7 +268,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                         let tupleDef = 
                                             typedefof<_ * _>
                                                 .MakeGenericType(typeCache.[domain], typeCache.[range])
-                                        let storeName' = storeName
+                                        let storeName' = storeUri
                                         
                                         let extension = 
                                             ProvidedProperty
@@ -387,7 +302,7 @@ type TypeProvider(config : TypeProviderConfig) as this =
         let parameters = 
             [ ProvidedStaticParameter("configurationFile", typeof<string>, "./liteq_default.ini") ]
         do provTy.DefineStaticParameters(parameters, buildTypes)
-        do this.AddNamespace(ns, [ provTy; easterEgg ])  
+        do this.AddNamespace(ns, [ provTy; temporaryClasses ])  
     end
 
 [<TypeProviderAssembly>]

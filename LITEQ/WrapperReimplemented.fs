@@ -24,59 +24,120 @@ let createInMemoryCache() =
               | true, value -> Some value
               | _ -> None }
 
-let cache : ICache<SparqlRemoteEndpoint> = createInMemoryCache()
+let queryCache : ICache<SparqlRemoteEndpoint> = createInMemoryCache()
+let updateCache: ICache<SparqlRemoteUpdateEndpoint> = createInMemoryCache()
 
-let createorRetrieve storeUri = 
-    match cache.TryRetrieve storeUri with
+let queryCreateOrRetrieve queryUri = 
+    match queryCache.TryRetrieve queryUri with
     | Some x -> x
-    | None -> cache.Set(storeUri, SparqlRemoteEndpoint(Uri storeUri))
+    | None -> queryCache.Set(queryUri, SparqlRemoteEndpoint(Uri queryUri))
+
+let updateCreateOrRetrieve updateUri = 
+    match updateCache.TryRetrieve updateUri with
+    | Some x -> x
+    | None -> updateCache.Set(updateUri, SparqlRemoteUpdateEndpoint(Uri updateUri))
+
 
 [<StructuredFormatDisplay("{InstanceUri}")>]
-type RdfResourceWrapper(instanceUri, storeUri) = 
+type RdfResourceWrapper(instanceUri, queryUri, updateUri:string option) = 
     class
-        let connection = createorRetrieve storeUri
+        let queryConnection = queryCreateOrRetrieve queryUri
+        let updateConnection = 
+            if updateUri.IsSome
+                then Some (updateCreateOrRetrieve updateUri.Value)
+                else None
         let isUri x = System.Uri.IsWellFormedUriString(x, System.UriKind.Absolute)
-        new(instanceUri, storeName, typeUri) = 
+        new(instanceUri, queryUri, typeUri, (updateUri:string option)) = 
             //TODO check if instance exists, if not insert into store
-            RdfResourceWrapper(instanceUri, storeName)
+            if updateUri.IsSome then
+                let query = "ASK { <" + (Uri instanceUri).ToString() + "> a <" + (Uri typeUri).ToString() + "> . }"
+                let con = queryCreateOrRetrieve queryUri
+                if not ((con.QueryWithResultSet query).Result) then
+                    (updateCreateOrRetrieve updateUri.Value).Update("INSERT DATA { <" + (Uri instanceUri).ToString() + "> a <" + (Uri typeUri).ToString() + "> . }")
+
+            RdfResourceWrapper(instanceUri, queryUri, updateUri)
         member __.InstanceUri = instanceUri
         
         member __.Item 
             with get (propertyUri) = 
-                printfn "In get"
                 let query = new SparqlParameterizedString("SELECT ?o WHERE { @instance @property ?o .}")
                 query.SetUri("instance", Uri instanceUri)
                 query.SetUri("property", Uri propertyUri)
-                connection.QueryWithResultSet(query.ToString())
-                |> Seq.map (fun r -> r.["o"].ToString())
-                |> Seq.toList
-            and set propertyUri (values : string list) = ()
+                queryConnection.QueryWithResultSet(query.ToString())
+                |> Seq.map (fun r ->
+                    let v = r.["o"].ToString()
+                    if v.Contains "^^"
+                        then v.Substring(0, v.IndexOf "^^")
+                        else v)
+                |> Seq.toList 
+            and set propertyUri (values : string list) =
+                let enc x = 
+                    if isUri x
+                        then "<" + (Uri x).ToString() + ">"
+                        else "\""+x+"\""
+                if updateConnection.IsNone then
+                    failwith "No SPARQL update endpoint specified"
+                // Query for existing values since we want to replace them
+                let query = "SELECT ?value WHERE { <" + (Uri instanceUri).ToString() + "> <" + (Uri propertyUri).ToString() + "> ?value .}"
+                let triplePatterns = 
+                    queryConnection.QueryWithResultSet(query.ToString())
+                    |> Seq.map(fun r ->
+                        "<" + (Uri instanceUri).ToString() + "> <" + (Uri propertyUri).ToString() + "> " + enc (r.["value"].ToString()) + " ." )
+                    |> String.concat ""
+                if not (triplePatterns = "") then
+                    updateConnection.Value.Update("DELETE DATA { " + triplePatterns + " }")
+
+                // Actually update the values
+                let updatePattern = 
+                    values 
+                    |> Seq.map(fun v -> "<"+(Uri instanceUri).ToString()+"> <"+(Uri propertyUri).ToString()+"> " + enc v + " ." )
+                    |> String.concat ""
+                let query = "INSERT DATA { " + updatePattern + " }"
+                updateConnection.Value.Update query
+
     end
 
-let QueryForInstances (u : string) (query : string) (storeUri : string) = 
+let createInstance instanceUri queryUri (updateUri: string) = 
+    if updateUri = ""
+        then new RdfResourceWrapper(instanceUri, queryUri, None) :> System.Object
+        else new RdfResourceWrapper(instanceUri, queryUri, Some updateUri) :> System.Object
+
+let createInstanceWithType instanceUri queryUri typeUri (updateUri: string) = 
+    if updateUri = ""
+        then new RdfResourceWrapper(instanceUri, queryUri, typeUri, None) :> System.Object
+        else new RdfResourceWrapper(instanceUri, queryUri, typeUri, Some updateUri) :> System.Object
+
+let accessProperty (wrapper:RdfResourceWrapper) (propertyUri:string) = 
+    wrapper.[propertyUri] :> System.Object
+
+let setProperty (wrapper:RdfResourceWrapper) (propertyUri:string) (values:System.Object) = 
+    let values' = values :?> string list
+    wrapper.[propertyUri] <- values'
+
+let QueryForInstances (u : string) (query : string) (queryUri : string) = 
     let u' = u.Replace("?","")
     let rec fetchNextOnes (offset : int) (limit : int) = 
         seq { 
             let query' = query + " LIMIT " + string (limit) + " OFFSET " + string (offset)
             let instances = 
-                (createorRetrieve storeUri).QueryWithResultSet(query') |> Seq.map (fun r -> r.[u'].ToString())
+                (queryCreateOrRetrieve queryUri).QueryWithResultSet(query') |> Seq.map (fun r -> r.[u'].ToString())
             for instanceUri in instances do
-                yield RdfResourceWrapper(instanceUri, storeUri)
+                yield RdfResourceWrapper(instanceUri, queryUri, None) :> System.Object
             if (Seq.length instances) = limit then yield! fetchNextOnes (offset + limit) limit
         }
     fetchNextOnes 0 1000
 
-let QueryForTuples (u : string, v : string) (query : string) (storeUri : string) = 
+let QueryForTuples (u : string, v : string) (query : string) (queryUri : string) = 
     let u', v' = u.Replace("?",""), v.Replace("?","")
     let rec fetchNextOnes (offset : int) (limit : int) = 
         seq { 
             let query' = query + " LIMIT " + string (limit) + " OFFSET " + string (offset)
             let instances = 
-                (createorRetrieve storeUri).QueryWithResultSet(query') 
+                (queryCreateOrRetrieve queryUri).QueryWithResultSet(query') 
                 |> Seq.map (fun r -> r.[u'].ToString(), r.[v'].ToString())
             for (u_instance, v_instance) in instances do
-                yield new RdfResourceWrapper(u_instance, storeUri) :> System.Object, 
-                      new RdfResourceWrapper(v_instance, storeUri) :> System.Object
+                yield new RdfResourceWrapper(u_instance, queryUri, None) :> System.Object, 
+                      new RdfResourceWrapper(v_instance, queryUri, None) :> System.Object
             if (Seq.length instances) = limit then yield! fetchNextOnes (offset + limit) limit
         }
     fetchNextOnes 0 1000
