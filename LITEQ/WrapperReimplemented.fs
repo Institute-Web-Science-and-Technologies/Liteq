@@ -7,6 +7,10 @@ open VDS.RDF.Update
 open System.Collections.Concurrent
 open System.Collections.Generic
 
+// ICache originally comes frmo FSharp.Data (https://github.com/fsharp/FSharp.Data/blob/master/src/CommonRuntime/Caching.fs)
+// TODO: Find out what legal stuff is necessary to include (just a link and a source code comment, can we just use the modules by
+// relying on FSharp.Data, and so on... )
+
 type ICache<'T> = 
     abstract TryRetrieve : string -> 'T option
     abstract Set : string * 'T -> 'T

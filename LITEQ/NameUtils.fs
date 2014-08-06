@@ -1,5 +1,9 @@
 ﻿module NameUtils
 
+// NameUtils originally comes frmo FSharp.Data (https://github.com/fsharp/FSharp.Data/blob/master/src/CommonRuntime/NameUtils.fs)
+// TODO: Find out what legal stuff is necessary to include (just a link and a source code comment, can we just use the modules by
+// relying on FSharp.Data, and so on... )
+
 open System
 open System.Globalization
 open System.Collections.Generic
