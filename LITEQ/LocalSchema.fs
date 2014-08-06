@@ -25,8 +25,8 @@ type IStore =
 type LocalSchema(path : string) = 
     class
         let graph = new Graph()
-        let namespaces = Configuration.prefixes
-        let niceName = NameUtils.uniqueGenerator NameUtils.niceCamelName
+        let mutable namespaces = List.empty<string*string> //Configuration.prefixes
+        let niceName = NameUtils.uniqueGeneratorForUri NameUtils.niceCamelName
         let logger = new Logger.Logger(Configuration.findConfVal KEY_LOG_LEVEL |> int)
 
         let makeComment (r : SparqlResult) = 
@@ -41,7 +41,7 @@ type LocalSchema(path : string) =
                 match ns with
                 | (prefix,u) :: tail ->
                     if uri.StartsWith u
-                        then niceName (uri.Replace(u,prefix+":"))
+                        then niceName uri (uri.Replace(u,prefix+":"))
                         else f uri tail
                 | [] -> uri    
             f uri namespaces
@@ -51,13 +51,12 @@ type LocalSchema(path : string) =
                 let parser = new RdfXmlParser()
                 parser.Load(graph, path)
             with 
-                | _ ->
-                    
+                | _ -> 
                     failwith "Failed to parse the previously created schema file"
-//            namespaces <-
-//                graph.NamespaceMap.Prefixes
-//                |> Seq.map(fun prefix -> prefix, (graph.NamespaceMap.GetNamespaceUri prefix).ToString() )            
-//                |> Seq.toList            
+            namespaces <-
+                graph.NamespaceMap.Prefixes
+                |> Seq.map(fun prefix -> prefix, (graph.NamespaceMap.GetNamespaceUri prefix).ToString() )            
+                |> Seq.toList            
 
         interface IStore with
             

@@ -64,7 +64,8 @@
     <Compile Include="StoreInterface.fs" />
     <Compile Include="LocalSchema.fs" />
     <Compile Include="TypeMapper.fs" />
-    <Compile Include="Provider.fs" />
+    <Compile Include="NPQLTypeProvider.fs" />
+    <Compile Include="PropertyBasedTypeProvider.fs" />
     <None Include="packages.config" />
     <None Include="liteq_default.ini">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

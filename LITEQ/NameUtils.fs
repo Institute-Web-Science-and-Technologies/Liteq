@@ -87,3 +87,26 @@ let uniqueGenerator niceName =
         name <- name.Substring(0, lastLetterPos + 1) + (UInt64.Parse number + 1UL).ToString()
     set.Add name |> ignore
     name
+
+let uniqueGeneratorForUri niceName =
+    let map = new Dictionary<string,string>()
+    let set = new HashSet<_>()
+    fun uri name ->
+        if map.ContainsKey uri 
+            then map.[uri]
+            else
+                let mutable name = niceName name
+                while set.Contains name do
+                  let mutable lastLetterPos = String.length name - 1
+                  while Char.IsDigit name.[lastLetterPos] && lastLetterPos > 0 do
+                    lastLetterPos <- lastLetterPos - 1
+                  if lastLetterPos = name.Length - 1 then
+                    name <- name + "2"
+                  elif lastLetterPos = 0 && name.Length = 1 then
+                    name <- (UInt64.Parse name + 1UL).ToString()
+                  else
+                    let number = name.Substring(lastLetterPos + 1)
+                    name <- name.Substring(0, lastLetterPos + 1) + (UInt64.Parse number + 1UL).ToString()
+                set.Add name |> ignore
+                map.Add (uri, name)
+                name

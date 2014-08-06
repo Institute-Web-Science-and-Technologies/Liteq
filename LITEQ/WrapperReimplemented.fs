@@ -48,7 +48,6 @@ type RdfResourceWrapper(instanceUri, queryUri, updateUri:string option) =
                 else None
         let isUri x = System.Uri.IsWellFormedUriString(x, System.UriKind.Absolute)
         new(instanceUri, queryUri, typeUri, (updateUri:string option)) = 
-            //TODO check if instance exists, if not insert into store
             if updateUri.IsSome then
                 let query = "ASK { <" + (Uri instanceUri).ToString() + "> a <" + (Uri typeUri).ToString() + "> . }"
                 let con = queryCreateOrRetrieve queryUri

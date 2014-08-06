@@ -130,11 +130,16 @@ let internal composeGraph (connection : SparqlRemoteEndpoint) (prefixUris:(strin
             then prefixUris |> List.map(fun (_,y) -> Uri y)
             else []
     
-    let prefixes = new Graph()//handlePrefixes userDefinedPrefixes
+    let prefixes = new Graph() //handlePrefixes userDefinedPrefixes
     [ extractClassesFromStore; extractPropertiesFromStore; extractSubClassRelations; extractDomainRelations; 
         extractRangeRelations; extractCommentsRelations ] 
     |> Seq.iter (fun f -> f connection prefixes graph |> Seq.iter (fun t -> (graph.Assert t) |> ignore))
     handleSpecialCases graph
+    
+    prefixUris
+    |> Seq.map(fun (x,y) -> x, Uri y)
+    |> Seq.iter graph.NamespaceMap.AddNamespace
+    
     let x = (new RdfXmlWriter())
     x.Save(graph, path)
     

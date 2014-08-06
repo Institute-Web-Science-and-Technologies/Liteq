@@ -11,11 +11,11 @@ open Configuration
 open WrapperReimplemented
 
 [<TypeProvider>]
-type TypeProvider(config : TypeProviderConfig) as this = 
+type NPQLBasedTypeProvider(config : TypeProviderConfig) as this = 
     class
         inherit TypeProviderForNamespaces()
 
-        let ns = "Uniko.Liteq"
+        let ns = "Uniko.West.Liteq.NPQL"
         let asm = Assembly.GetExecutingAssembly()
         let provTy = ProvidedTypeDefinition(asm, ns, "RDFStore", Some typeof<obj>)
 
@@ -185,55 +185,65 @@ type TypeProvider(config : TypeProviderConfig) as this =
             let isReadOnly = (updateUri = "")
             let t = ProvidedTypeDefinition(className = typeName, baseType = Some typeof<obj>)
             provTy.AddMember t
-            
-
+            let classes = ProvidedTypeDefinition("Classes", None)
+            t.AddMember classes
             t.AddMember
                 (ProvidedProperty
                      (propertyName = "IsReadOnly", propertyType = typeof<bool>, IsStatic = true, 
                       GetterCode = fun _ -> <@@ isReadOnly @@>))
             // Build types from store
-            t.AddMembersDelayed(fun _ -> 
+            let x = 
                 s.Classes |> List.map (fun (typeUri, typeName, comment) -> 
-                                 let typeDef = 
-                                     ProvidedTypeDefinition
-                                         (className = typeName, baseType = None, HideObjectMethods = true)
-                                 typeDef.AddXmlDoc comment
-                                 typeDef.AddMembersDelayed(fun _ -> buildTypeNavigationOptions typeUri)
-                                 let intension = 
-                                     ProvidedTypeDefinition
-                                         (className = "Intension", baseType = Some typeof<obj>)
-                                 intension.AddMembersDelayed(fun _ -> buildIntension typeUri isReadOnly)
-                                 let storeName' = storeUri
+                                        let typeDef = 
+                                            ProvidedTypeDefinition
+                                                (className = typeName, baseType = None, HideObjectMethods = true)
+                                        typeDef.AddXmlDoc comment
+                                        typeDef.AddMembersDelayed(fun _ -> buildTypeNavigationOptions typeUri)
+                                        let intension = 
+                                            ProvidedTypeDefinition
+                                                (className = "Intension", baseType = Some typeof<obj>)
+                                        intension.AddMembersDelayed(fun _ -> buildIntension typeUri isReadOnly)
+                                        let storeName' = storeUri
                                  
-                                 let extension = 
-                                     ProvidedProperty
-                                         (propertyName = "Extension", 
-                                          propertyType = typedefof<seq<_>>.MakeGenericType(intension), 
-                                          GetterCode = fun args -> 
-                                              <@@ let u, v, triples = 
-                                                      (%%args.[0] : obj) :?> string * string * (string * string * string) list
+                                        let extension = 
+                                            ProvidedProperty
+                                                (propertyName = "Extension", 
+                                                propertyType = typedefof<seq<_>>.MakeGenericType(intension), 
+                                                GetterCode = fun args -> 
+                                                    <@@ let u, v, triples = 
+                                                            (%%args.[0] : obj) :?> string * string * (string * string * string) list
                                                   
-                                                  let patternsString = 
-                                                      triples
-                                                      |> List.map 
-                                                             (fun (s, p, o) -> s + " " + p + " " + o + " .\n")
-                                                      |> List.reduce (fun acc pattern -> acc + pattern)
+                                                        let patternsString = 
+                                                            triples
+                                                            |> List.map 
+                                                                    (fun (s, p, o) -> s + " " + p + " " + o + " .\n")
+                                                            |> List.reduce (fun acc pattern -> acc + pattern)
                                                   
-                                                  let query = 
-                                                      "SELECT " + u + " WHERE {\n" + patternsString + "}"
-                                                  WrapperReimplemented.QueryForInstances u query storeName' @@>)
-                                 //let intension' = ProvidedProperty(propertyName="Intension'", propertyType=factoryThingy)
-                                 extension.AddXmlDoc "Returns all instances that satisfy the query"
-                                 typeDef.AddMembers [ extension :> MemberInfo
-                                                      intension :> MemberInfo ]
-                                 typeCache.Add(typeUri, typeDef)
-                                 typeCache.Add(typeUri + "Intension", intension)
-                                 typeNames.Add(typeUri, typeName)
-                                 typeDef))
-            // Build predefined types
+                                                        let query = 
+                                                            "SELECT " + u + " WHERE {\n" + patternsString + "}"
+                                                        WrapperReimplemented.QueryForInstances u query storeName' @@>)
+                                        //let intension' = ProvidedProperty(propertyName="Intension'", propertyType=factoryThingy)
+                                        extension.AddXmlDoc "Returns all instances that satisfy the query"
+                                        typeDef.AddMembers [ extension :> MemberInfo;
+                                                            intension :> MemberInfo ]
+                                        if not( typeCache.ContainsKey typeUri) then
+                                            typeCache.Add(typeUri, typeDef)
+                                            typeCache.Add(typeUri + "Intension", intension)
+                                            typeNames.Add(typeUri, typeName) 
+                                        typeDef)
+            classes.AddMembers(x)
+            
+            // Special treatment for rdfs:Literal
+            let literal = ProvidedTypeDefinition(className = "Literal", baseType = None, HideObjectMethods = true)
+            typeCache.Add("http://www.w3.org/2000/01/rdf-schema#Literal", literal)
+            typeNames.Add("http://www.w3.org/2000/01/rdf-schema#Literal", "Literal")
+            // HACK: I don't think we need these two statements
+            typeCache.Add("http://www.w3.org/2001/XMLSchema#int", literal)
+            typeNames.Add("http://www.w3.org/2001/XMLSchema#int", "Literal")
+            classes.AddMember literal
+
+            // Build NPQL type
             t.AddMembersDelayed(fun _ -> 
-                let literal = 
-                    ProvidedTypeDefinition(className = "Literal", baseType = None, HideObjectMethods = true)
                 let query = 
                     ProvidedTypeDefinition(className = "NPQL", baseType = None, HideObjectMethods = true)
                 query.AddMember(ProvidedConstructor(parameters = [], 
@@ -248,14 +258,11 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                               <@@ let u, v, triples = 
                                                       (%%args.[0] : obj) :?> string * string * (string * string * string) list
                                                   u, v, (u, "a", "<" + typeUri + ">") :: triples @@>))
-                typeCache.Add("http://www.w3.org/2000/01/rdf-schema#Literal", literal)
-                typeNames.Add("http://www.w3.org/2000/01/rdf-schema#Literal", "Literal")
-                typeCache.Add("http://www.w3.org/2001/XMLSchema#int", literal)
-                typeNames.Add("http://www.w3.org/2001/XMLSchema#int", "Literal")
-                [ literal :> MemberInfo
-                  query :> MemberInfo ])
+                [ query :> MemberInfo ])
             // Build properties from store
-            t.AddMembersDelayed(fun _ -> 
+            let properties = new ProvidedTypeDefinition("Properties", None)
+            t.AddMember properties
+            properties.AddMembers( 
                 s.Properties |> List.map (fun (propertyUri, typeName, comment, domain, range) -> 
                                     let typeDef = 
                                         ProvidedTypeDefinition
@@ -294,8 +301,9 @@ type TypeProvider(config : TypeProviderConfig) as this =
                                                          WrapperReimplemented.QueryForTuples (u, u') query storeName' @@>)
                                         extension.AddXmlDoc "Returns all instances that satisfy the query"
                                         typeDef.AddMembers [ extension ]
-                                    typeCache.Add(propertyUri, typeDef)
-                                    typeNames.Add(propertyUri, typeName)
+                                    if not(typeCache.ContainsKey propertyUri) then
+                                        typeCache.Add(propertyUri, typeDef)
+                                        typeNames.Add(propertyUri, typeName)
                                     typeDef))
             t
         
