@@ -136,7 +136,7 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                 if conf.HasConfValue KEY_UPDATE_URI then
                     updateUri <- conf.FindConfValue KEY_UPDATE_URI
                 if not(System.IO.File.Exists (conf.FindConfValue KEY_SCHEMA_FILE) ) then
-                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf.Prefixes (conf.FindConfValue "schemaFile") 
+                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf
                 store <- Some (LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
                 makeLabel <- (store.Value:?>LocalSchema).makeLabel
 

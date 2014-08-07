@@ -22,7 +22,7 @@ type ValueType =
         | URI x -> graph.CreateUriNode(Uri x) :> INode
         | LITERAL x -> graph.CreateLiteralNode(x) :> INode
 
-let internal logger = new Logger.Logger(Configuration.findConfVal KEY_LOG_LEVEL |> int)
+let internal logger = new Logger.Logger(Configuration.DEFAULT_LOG_LEVEL)
 let internal map1Var (v : string) (r : SparqlResult) : string = r.Value(v).ToString()
 let internal isNoBlankNode (v : string) = v.StartsWith("_") |> not
 let internal isNoBlankNode2 ((v, w) : string * string) = isNoBlankNode (v) && isNoBlankNode (w)
@@ -122,11 +122,13 @@ let internal handlePrefixes (definedPrefixes:Uri list) =
         acc.Merge g
         acc) (new Graph() :> IGraph)
 
-// Works 👍
-let internal composeGraph (connection : SparqlRemoteEndpoint) (prefixUris:(string*string) list) (path : string) =     
+// Works 👍 
+let internal composeGraph (connection : SparqlRemoteEndpoint) (conf:Configuration) =
+    let path = conf.FindConfValue "schemaFile" 
+    let prefixUris = conf.Prefixes  
     let graph = new Graph()
     let userDefinedPrefixes = 
-        if Configuration.hasConfVal KEY_GATHER_PREFIX_DATA && (bool.Parse(Configuration.findConfVal KEY_GATHER_PREFIX_DATA))
+        if conf.HasConfValue KEY_GATHER_PREFIX_DATA && (bool.Parse(conf.FindConfValue KEY_GATHER_PREFIX_DATA))
             then prefixUris |> List.map(fun (_,y) -> Uri y)
             else []
     
