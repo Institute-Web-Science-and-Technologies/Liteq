@@ -172,14 +172,14 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
         let buildTypes (typeName : string) (args : obj []) = 
             let configFilePath = args.[0] :?> string
             if store.IsNone then 
-                Configuration.initConf configFilePath
+                let conf = Configuration(configFilePath)
                 let x = System.IO.Path.GetFullPath(configFilePath)
-                storeUri <- Configuration.findConfVal KEY_SERVER_URI
-                if Configuration.hasConfVal KEY_UPDATE_URI then
-                    updateUri <- Configuration.findConfVal KEY_UPDATE_URI
-                if not(System.IO.File.Exists (Configuration.findConfVal KEY_SCHEMA_FILE) ) then
-                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) Configuration.prefixes (Configuration.findConfVal "schemaFile") 
-                store <- Some(Schema.LocalSchema(Configuration.findConfVal KEY_SCHEMA_FILE) :> IStore)
+                storeUri <- conf.FindConfValue KEY_SERVER_URI
+                if conf.HasConfValue KEY_UPDATE_URI then
+                    updateUri <- conf.FindConfValue KEY_UPDATE_URI
+                if not(System.IO.File.Exists (conf.FindConfValue KEY_SCHEMA_FILE) ) then
+                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf 
+                store <- Some(Schema.LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
 
             let s = store.Value
             let isReadOnly = (updateUri = "")

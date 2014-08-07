@@ -12,25 +12,37 @@ let KEY_GATHER_PREFIX_DATA = "gatherPrefixData"
 let KEY_PREFIX_FILE = "prefixFile"
 let KEY_LOG_LEVEL = "logLevel"
 
-let internal logger = Logger.Logger(5)
-let mutable internal conf : (string * string) list = List.empty
-let mutable internal prefixes : (string * string) list = List.empty
+let DEFAULT_LOG_LEVEL = 5
 
-let findConfVal (key : string) = 
-    conf |> List.pick (fun (k, v) -> 
-                if k = key then Some(v)
-                else None)
+let internal logger = Logger.Logger(DEFAULT_LOG_LEVEL)
 
-let hasConfVal (key : string) = conf |> List.exists (fun (k, v) -> k = key)
+type Configuration(fileName:string) = 
+    let mutable conf : (string * string) list = List.empty
+    let mutable prefixes : (string * string) list = List.empty
 
-let initConf (filename : string) = 
-    conf <- [ for line in File.ReadAllLines(filename) do
-                  if not (line.StartsWith("//")) then yield (line.Split('=') |> (fun a -> a.[0].Trim(), a.[1].Trim())) ]
-    if hasConfVal "prefixFile" then 
-        prefixes <- [ for line in File.ReadAllLines(findConfVal ("prefixFile")) do
-                          yield (line.Split('=') |> (fun a -> a.[0].Trim(), a.[1].Trim())) ]
-    else logger.Info "No prefix file defined"
-//    printfn "%A" (readIni("liteq_config.txt"))
-//    printfn "%A" (getVal("key1"))
-//    printfn "%A" (getVal("key2"))
-//    Console.ReadLine() |> ignore
+    let hasConfVal key = 
+                not(conf.IsEmpty) && 
+                conf |> List.exists (fun (k, v) -> k = key)
+
+    let findConfVal key = 
+                conf |> List.pick (fun (k, v) -> 
+                            if k = key then Some(v)
+                            else None)
+
+    let initConf = 
+        conf <- [ for line in File.ReadAllLines(fileName) do
+                      if not (line.StartsWith("//")) then yield (line.Split('=') |> (fun a -> a.[0].Trim(), a.[1].Trim())) ]
+        if hasConfVal "prefixFile" then 
+            prefixes <- [ for line in File.ReadAllLines(findConfVal ("prefixFile")) do
+                              yield (line.Split('=') |> (fun a -> a.[0].Trim(), a.[1].Trim())) ]
+        else logger.Info "No prefix file defined"
+
+    do initConf
+
+    member this.FindConfValue (key : string) = findConfVal key
+    member this.HasConfValue (key : string) = hasConfVal key
+    member this.Prefixes = prefixes
+            
+
+
+

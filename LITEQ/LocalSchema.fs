@@ -27,7 +27,7 @@ type LocalSchema(path : string) =
         let graph = new Graph()
         let mutable namespaces = List.empty<string*string> //Configuration.prefixes
         let niceName = NameUtils.uniqueGeneratorForUri NameUtils.niceCamelName
-        let logger = new Logger.Logger(Configuration.findConfVal KEY_LOG_LEVEL |> int)
+        let logger = new Logger.Logger(Configuration.DEFAULT_LOG_LEVEL)
 
         let makeComment (r : SparqlResult) = 
             if r.HasValue("comment") && not (r.["comment"].ToString() = "") then 
