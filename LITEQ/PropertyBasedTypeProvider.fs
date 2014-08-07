@@ -128,15 +128,16 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                 x :> MemberInfo)
             |> Seq.toList
         
-        let buildTypes (typeName : string) (configFile : string) =             
+        let buildTypes (typeName : string) (configFile : string) =  
+                       
             if store.IsNone then
-                Configuration.initConf configFile
-                storeUri <- Configuration.findConfVal KEY_SERVER_URI
-                if Configuration.hasConfVal KEY_UPDATE_URI then
-                    updateUri <- Configuration.findConfVal KEY_UPDATE_URI
-                if not(System.IO.File.Exists (Configuration.findConfVal KEY_SCHEMA_FILE) ) then
-                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) Configuration.prefixes (Configuration.findConfVal "schemaFile") 
-                store <- Some (LocalSchema(Configuration.findConfVal KEY_SCHEMA_FILE) :> IStore)
+                let conf = Configuration(configFile)
+                storeUri <- conf.FindConfValue KEY_SERVER_URI
+                if conf.HasConfValue KEY_UPDATE_URI then
+                    updateUri <- conf.FindConfValue KEY_UPDATE_URI
+                if not(System.IO.File.Exists (conf.FindConfValue KEY_SCHEMA_FILE) ) then
+                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf.Prefixes (conf.FindConfValue "schemaFile") 
+                store <- Some (LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
                 makeLabel <- (store.Value:?>LocalSchema).makeLabel
 
             let t = ProvidedTypeDefinition(className = typeName, baseType = None)
