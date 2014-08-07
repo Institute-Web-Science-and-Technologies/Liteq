@@ -234,13 +234,14 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
             classes.AddMembers(x)
             
             // Special treatment for rdfs:Literal
-            let literal = ProvidedTypeDefinition(className = "Literal", baseType = None, HideObjectMethods = true)
-            typeCache.Add("http://www.w3.org/2000/01/rdf-schema#Literal", literal)
-            typeNames.Add("http://www.w3.org/2000/01/rdf-schema#Literal", "Literal")
-            // HACK: I don't think we need these two statements
-            typeCache.Add("http://www.w3.org/2001/XMLSchema#int", literal)
-            typeNames.Add("http://www.w3.org/2001/XMLSchema#int", "Literal")
-            classes.AddMember literal
+            if not(typeCache.ContainsKey "http://www.w3.org/2000/01/rdf-schema#Literal") then
+                let literal = ProvidedTypeDefinition(className = "Literal", baseType = None, HideObjectMethods = true)
+                typeCache.Add("http://www.w3.org/2000/01/rdf-schema#Literal", literal)
+                typeNames.Add("http://www.w3.org/2000/01/rdf-schema#Literal", "Literal")
+                // HACK: I don't think we need these two statements
+                typeCache.Add("http://www.w3.org/2001/XMLSchema#int", literal)
+                typeNames.Add("http://www.w3.org/2001/XMLSchema#int", "Literal")
+                classes.AddMember literal
 
             // Build NPQL type
             t.AddMembersDelayed(fun _ -> 
