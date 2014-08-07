@@ -17,7 +17,7 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
 
         let ns = "Uniko.West.Liteq.NPQL"
         let asm = Assembly.GetExecutingAssembly()
-        let provTy = ProvidedTypeDefinition(asm, ns, "RDFStore", Some typeof<obj>)
+        let provTy = ProvidedTypeDefinition(asm, ns, "NpqlRdfProvider", Some typeof<obj>)
 
         let temporaryClasses = ProvidedTypeDefinition(asm, ns, "Temporary classes", None)
         let typeCache = System.Collections.Generic.Dictionary<string, ProvidedTypeDefinition>()

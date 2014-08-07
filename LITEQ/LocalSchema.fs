@@ -19,7 +19,7 @@ type IStore =
     /// <param name="typeUri">The URI of the type</param >
     abstract member SubclassesForType: string -> (string*string) list
     /// <summary>Takes a property URI and returns the range URI</summary>
-    /// <param name=propertyUri>The URI of the property</param>
+    /// <param name="propertyUri">The URI of the property</param>
     abstract member RangeForProperty: string -> string
 
 type LocalSchema(path : string) = 
@@ -36,16 +36,6 @@ type LocalSchema(path : string) =
         
         // In theory, RDFS also has a rdfs:label predicate. But 1) its more reliable to use the actual URI as a name and 2)
         // this allows you to see the namespace from which it originates
-        let makeLabel (uri : string) = 
-            let rec f (uri:string) ns = 
-                match ns with
-                | (prefix,u) :: tail ->
-                    if uri.StartsWith u
-                        then niceName uri (uri.Replace(u,prefix+":"))
-                        else f uri tail
-                | [] -> uri    
-            f uri namespaces
-        
         do 
             try 
                 let parser = new RdfXmlParser()
@@ -57,9 +47,21 @@ type LocalSchema(path : string) =
                 graph.NamespaceMap.Prefixes
                 |> Seq.map(fun prefix -> prefix, (graph.NamespaceMap.GetNamespaceUri prefix).ToString() )            
                 |> Seq.toList            
+        
+        //TODO: Think about removing this function from this class and put it into a utils class
+        member __.makeLabel (uri : string) = 
+            let rec f (uri:string) ns = 
+                match ns with
+                | (prefix,u) :: tail ->
+                    if uri.StartsWith u
+                        then niceName uri (uri.Replace(u,prefix+":"))
+                        else f uri tail
+                | [] -> uri    
+            f uri namespaces
 
         interface IStore with
-            
+
+
             member __.Classes = 
                 let query = "SELECT DISTINCT ?class ?comment WHERE {
                     ?class a <http://www.w3.org/2000/01/rdf-schema#Class> .
@@ -68,7 +70,7 @@ type LocalSchema(path : string) =
                 (graph.ExecuteQuery(new SparqlParameterizedString(query)) :?> SparqlResultSet)
                 |> Seq.map (fun r -> 
                        let uri = r.["class"].ToString()
-                       let label = makeLabel uri
+                       let label = __.makeLabel uri
                        let comment = makeComment r
                        uri, label, comment)
                 |> Seq.toList
@@ -82,7 +84,7 @@ type LocalSchema(path : string) =
                 (graph.ExecuteQuery(new SparqlParameterizedString(query)) :?> SparqlResultSet)
                 |> Seq.map (fun r -> 
                        let uri = r.["uri"].ToString()
-                       let label = makeLabel uri
+                       let label = __.makeLabel uri
                        let comment = makeComment r
                        let domain = r.["domain"].ToString()
                        let range = r.["range"].ToString()
@@ -107,7 +109,7 @@ type LocalSchema(path : string) =
                 (graph.ExecuteQuery(parameterizedQuery) :?> SparqlResultSet)
                 |> Seq.map (fun r -> 
                        let uri = r.["uri"].ToString()
-                       let label = makeLabel uri
+                       let label = __.makeLabel uri
                        let comment = makeComment r
                        let range = r.["range"].ToString()
                        uri, label, comment, range)
@@ -122,7 +124,7 @@ type LocalSchema(path : string) =
                 (graph.ExecuteQuery(parameterizedQuery) :?> SparqlResultSet)
                 |> Seq.map (fun r -> 
                        let uri = r.["uri"].ToString()
-                       let label = makeLabel uri
+                       let label = __.makeLabel uri
                        uri, label)
                 |> Seq.toList
             
