@@ -38,15 +38,17 @@ type LocalSchema(path : string) =
         // this allows you to see the namespace from which it originates
         do 
             try 
-                let parser = new RdfXmlParser()
-                parser.Load(graph, path)
+                if System.IO.File.Exists(path) then
+                    let parser = new RdfXmlParser()
+                    parser.Load(graph, path)
+                    namespaces <-
+                        graph.NamespaceMap.Prefixes
+                        |> Seq.map(fun prefix -> prefix, (graph.NamespaceMap.GetNamespaceUri prefix).ToString() )            
+                        |> Seq.toList
             with 
                 | _ -> 
                     failwith "Failed to parse the previously created schema file"
-            namespaces <-
-                graph.NamespaceMap.Prefixes
-                |> Seq.map(fun prefix -> prefix, (graph.NamespaceMap.GetNamespaceUri prefix).ToString() )            
-                |> Seq.toList            
+                        
         
         //TODO: Think about removing this function from this class and put it into a utils class
         member __.makeLabel (uri : string) = 

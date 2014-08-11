@@ -42,55 +42,58 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
             let updateUri' = updateUri
             match getPropertyType p with
             | URI -> 
-                ProvidedProperty
-                    (propertyName = makeLabel p, propertyType = typedefof<list<_>>.MakeGenericType(typeof<RdfResourceWrapper>), 
-                     GetterCode = fun args -> 
+                let prov = ProvidedProperty(propertyName = makeLabel p, propertyType = typedefof<list<_>>.MakeGenericType(typeof<RdfResourceWrapper>))
+                prov.GetterCode <- fun args -> 
                          <@@
                             let wrapper = (%%args.[0] : RdfResourceWrapper) 
                             (accessProperty wrapper p) :?> string list
                             |> List.map 
-                                (fun uri -> WrapperReimplemented.createInstance uri storeUri' updateUri' :?> RdfResourceWrapper)  @@>)
+                                (fun uri -> WrapperReimplemented.createInstance uri storeUri' updateUri' :?> RdfResourceWrapper)  @@>
+                if not (updateUri = "") then
+                    prov.SetterCode <- fun args ->
+                        <@@
+                            let wrapper = (%%args.[0] : RdfResourceWrapper) 
+                            let values = (%%args.[1] : RdfResourceWrapper list)
+                            wrapper.[p] <- (values |> List.map(fun x -> x.InstanceUri)) @@>
+                prov
             | LITERAL -> 
-                ProvidedProperty
-                    (propertyName = makeLabel p, propertyType = typedefof<list<_>>.MakeGenericType(typeof<string>), 
-                     GetterCode = fun args -> <@@
+                let prov = ProvidedProperty(propertyName = makeLabel p, propertyType = typedefof<list<_>>.MakeGenericType(typeof<string>))
+                prov.GetterCode <- fun args -> <@@
                         let wrapper = (%%args.[0] : RdfResourceWrapper) 
                         (accessProperty wrapper p) :?> string list
-                     @@>)
+                     @@>
+                if not (updateUri = "") then
+                    prov.SetterCode <- fun args ->
+                        <@@
+                            let wrapper = (%%args.[0] : RdfResourceWrapper) 
+                            let values = (%%args.[1] : string list)
+                            wrapper.[p] <- values @@>
+                prov
         
         let createUnspecifcType (previouslyChosen : Property list) = 
             let storeUri' = storeUri
+            let updateUri' = updateUri
             let t = ProvidedTypeDefinition("Unnamed", baseType = Some typeof<RdfResourceWrapper>)
             let extensionQuery = "SELECT DISTINCT ?s WHERE { " + Transform previouslyChosen + " }" //makeSubjectQueryWithType previouslyChosen classUri
             t.AddMember
                 (ProvidedProperty
                      ("Extension", typedefof<seq<_>>.MakeGenericType(t), IsStatic = true, 
-                      GetterCode = fun _ -> <@@ WrapperReimplemented.test "?s" extensionQuery storeUri' @@>))
+                      GetterCode = fun _ -> <@@ WrapperReimplemented.QueryForInstancesWithoutCasting "?s" extensionQuery storeUri' updateUri' @@>))
 
             previouslyChosen
             |> Seq.map convertToProperty
-//                match getPropertyType p with
-//                    | URI -> 
-//                        ProvidedProperty
-//                            (propertyName = makeLabel p, propertyType = typedefof<list<_>>.MakeGenericType(typeof<RdfResourceWrapper>), 
-//                             GetterCode = fun args ->  <@@
-//                                                        let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
-//                                                        (accessProperty wrapper p) :?> string list
-//                                                        |> List.map 
-//                                                            (fun uri -> WrapperReimplemented.createInstance uri storeUri' updateUri' ) @@>) // new RdfResourceWrapper(uri, storeUri', None)) @@>)
-//
-//                    | LITERAL -> 
-//                        ProvidedProperty
-//                            (propertyName = makeLabel p, propertyType = typedefof<list<_>>.MakeGenericType(typeof<string>), 
-//                             GetterCode = fun args -> <@@
-//                        let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
-//                        (accessProperty wrapper p) :?> string list
-//                             @@>))
             |> Seq.iter t.AddMember
+
+            t.AddMember(new ProvidedConstructor(parameters = [ ProvidedParameter
+                                                           (parameterName = "instanceUri", 
+                                                            parameterType = typeof<string>) ], 
+                                        InvokeCode = fun args -> 
+                                            <@@ createInstanceWithType (%%args.[0] : string) storeUri' typeUri updateUri' @@>))
             t
         
         let createIntersectionTypes (previouslyChosen : Property list) = 
             let storeUri' = storeUri
+            let updateUri' = updateUri
             let container = ProvidedTypeDefinition("Named", baseType = None)
             container.AddMembersDelayed(fun _ -> 
                 WrapperReimplemented.TypesOfInstances previouslyChosen storeUri'
@@ -100,7 +103,7 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                        t.AddMember
                            (ProvidedProperty
                                 ("Extension", typedefof<seq<_>>.MakeGenericType(t), IsStatic = true, 
-                                 GetterCode = fun _ -> <@@ WrapperReimplemented.test "?s" extensionQuery storeUri' @@>))          
+                                 GetterCode = fun _ -> <@@ WrapperReimplemented.QueryForInstancesWithoutCasting "?s" extensionQuery storeUri' updateUri' @@>))          
                        WrapperReimplemented.PropertiesWith classUri storeUri
                        |> Set.ofSeq
                        |> Set.union (previouslyChosen |> Set.ofSeq)

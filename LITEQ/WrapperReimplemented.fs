@@ -123,7 +123,7 @@ let setProperty (wrapper:RdfResourceWrapper) (propertyUri:string) (values:System
     wrapper.[propertyUri] <- values'
 
 // TODO: Add updateUri
-let QueryForInstances (u : string) (query : string) (queryUri : string) = 
+let QueryForInstances (u : string) (query : string) (queryUri : string) (updateUri:string) = 
     let u' = u.Replace("?","")
     let rec fetchNextOnes (offset : int) (limit : int) = 
         seq { 
@@ -131,12 +131,12 @@ let QueryForInstances (u : string) (query : string) (queryUri : string) =
             let instances = 
                 (queryCreateOrRetrieve queryUri).QueryWithResultSet(query') |> Seq.map (fun r -> r.[u'].ToString())
             for instanceUri in instances do
-                yield RdfResourceWrapper(instanceUri, queryUri, None) :> System.Object
+                yield createInstance instanceUri queryUri updateUri //RdfResourceWrapper(instanceUri, queryUri, None) :> System.Object
             if (Seq.length instances) = limit then yield! fetchNextOnes (offset + limit) limit
         }
     fetchNextOnes 0 1000
 
-let QueryForTuples (u : string, v : string) (query : string) (queryUri : string) = 
+let QueryForTuples (u : string, v : string) (query : string) (queryUri : string) (updateUri:string) = 
     let u', v' = u.Replace("?",""), v.Replace("?","")
     let rec fetchNextOnes (offset : int) (limit : int) = 
         seq { 
@@ -145,14 +145,14 @@ let QueryForTuples (u : string, v : string) (query : string) (queryUri : string)
                 (queryCreateOrRetrieve queryUri).QueryWithResultSet(query') 
                 |> Seq.map (fun r -> r.[u'].ToString(), r.[v'].ToString())
             for (u_instance, v_instance) in instances do
-                yield new RdfResourceWrapper(u_instance, queryUri, None) :> System.Object, 
-                      new RdfResourceWrapper(v_instance, queryUri, None) :> System.Object
+                yield createInstance u_instance queryUri updateUri, 
+                      createInstance u_instance queryUri updateUri  
             if (Seq.length instances) = limit then yield! fetchNextOnes (offset + limit) limit
         }
     fetchNextOnes 0 1000
 
-
-let test (u : string) (query : string) (queryUri : string) = 
+// HACK: There must be a better way than having 3 functions that do essentially the same
+let QueryForInstancesWithoutCasting (u : string) (query : string) (queryUri : string) (updateUri:string) = 
     let u' = u.Replace("?","")
     let rec fetchNextOnes (offset : int) (limit : int) = 
         seq { 
@@ -160,7 +160,9 @@ let test (u : string) (query : string) (queryUri : string) =
             let instances = 
                 (queryCreateOrRetrieve queryUri).QueryWithResultSet(query') |> Seq.map (fun r -> r.[u'].ToString())
             for instanceUri in instances do
-                yield RdfResourceWrapper(instanceUri, queryUri, None)
+                if updateUri = ""
+                    then yield RdfResourceWrapper(instanceUri, queryUri, None)
+                    else yield RdfResourceWrapper(instanceUri, queryUri, Some updateUri)
             if (Seq.length instances) = limit then yield! fetchNextOnes (offset + limit) limit
         }
     fetchNextOnes 0 1000

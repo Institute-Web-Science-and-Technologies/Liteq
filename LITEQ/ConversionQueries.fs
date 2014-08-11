@@ -132,6 +132,7 @@ let internal composeGraph (connection : SparqlRemoteEndpoint) (conf:Configuratio
             then prefixUris |> List.map(fun (_,y) -> Uri y)
             else []
     
+    // TODO: Make prefixes work again
     let prefixes = new Graph() //handlePrefixes userDefinedPrefixes
     [ extractClassesFromStore; extractPropertiesFromStore; extractSubClassRelations; extractDomainRelations; 
         extractRangeRelations; extractCommentsRelations ] 

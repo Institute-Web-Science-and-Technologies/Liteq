@@ -1,5 +1,7 @@
 ﻿namespace LITEQ
 
+// TODO: foafAgent subClassNav moMusicArtist - fragt die SPARQL query nur nach moMusicArtist oder nach moMusicArtist UND foafAgent
+
 open Microsoft.FSharp.Core.CompilerServices
 open Microsoft.FSharp.Collections
 open ProviderImplementation.ProvidedTypes
@@ -203,8 +205,9 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                             ProvidedTypeDefinition
                                                 (className = "Intension", baseType = Some typeof<obj>)
                                         intension.AddMembersDelayed(fun _ -> buildIntension typeUri isReadOnly)
-                                        let storeName' = storeUri
-                                 
+                                        let storeUri' = storeUri
+                                        let updateUri' = updateUri
+
                                         let extension = 
                                             ProvidedProperty
                                                 (propertyName = "Extension", 
@@ -221,7 +224,7 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                                   
                                                         let query = 
                                                             "SELECT " + u + " WHERE {\n" + patternsString + "}"
-                                                        WrapperReimplemented.QueryForInstances u query storeName' @@>)
+                                                        WrapperReimplemented.QueryForInstances u query storeUri' updateUri' @@>)
                                         //let intension' = ProvidedProperty(propertyName="Intension'", propertyType=factoryThingy)
                                         extension.AddXmlDoc "Returns all instances that satisfy the query"
                                         typeDef.AddMembers [ extension :> MemberInfo;
@@ -276,8 +279,9 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                         let tupleDef = 
                                             typedefof<_ * _>
                                                 .MakeGenericType(typeCache.[domain], typeCache.[range])
-                                        let storeName' = storeUri
-                                        
+                                        let storeUri' = storeUri
+                                        let updateUri' = updateUri
+
                                         let extension = 
                                             ProvidedProperty
                                                 (propertyName = "Extension", 
@@ -299,7 +303,7 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                                          let query = 
                                                              "SELECT " + u + " " + u' + " WHERE {\n" 
                                                              + patternsString + "}"
-                                                         WrapperReimplemented.QueryForTuples (u, u') query storeName' @@>)
+                                                         WrapperReimplemented.QueryForTuples (u, u') query storeUri' updateUri' @@>)
                                         extension.AddXmlDoc "Returns all instances that satisfy the query"
                                         typeDef.AddMembers [ extension ]
                                     if not(typeCache.ContainsKey propertyUri) then
