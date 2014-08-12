@@ -1,4 +1,4 @@
-﻿module ConversionQueries
+﻿module TypeProviderImplementation.ConversionQueries
 
 // Namespaces: 
 // RDF : http://www.w3.org/1999/02/22-rdf-syntax-ns#
@@ -12,7 +12,7 @@ open VDS.RDF.Storage
 open System.IO
 open VDS.RDF.Query.Datasets
 open VDS.RDF.Parsing
-open Configuration
+open TypeProviderImplementation.Configuration
 
 type ValueType = 
     | URI of string
@@ -84,7 +84,9 @@ let internal extractDomainRelations (connection : SparqlRemoteEndpoint) (prefixG
 
 let internal extractRangeRelations (connection : SparqlRemoteEndpoint) (prefixGraph:IGraph) (graph : Graph) = 
     let p = "http://www.w3.org/2000/01/rdf-schema#range"
-    let query = "SELECT DISTINCT ?s ?o WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#range> ?o . }"
+    let query = "SELECT DISTINCT ?s ?o WHERE {
+        ?s <http://www.w3.org/2000/01/rdf-schema#range> ?o .
+    }"
     let r = (prefixGraph.ExecuteQuery(query) :?> SparqlResultSet)
     r.Results.AddRange(connection.QueryWithResultSet(query).Results)
     r
@@ -95,7 +97,10 @@ let internal extractRangeRelations (connection : SparqlRemoteEndpoint) (prefixGr
 
 let internal extractCommentsRelations (connection : SparqlRemoteEndpoint) (prefixGraph:IGraph) (graph : Graph) = 
     let p = "http://www.w3.org/2000/01/rdf-schema#comment"
-    let query = "SELECT DISTINCT ?s ?o WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#comment> ?o . }"
+    let query = "SELECT DISTINCT ?s ?o WHERE {
+        ?s <http://www.w3.org/2000/01/rdf-schema#comment> ?o .
+        FILTER(LANG(?o) = \"\" || LANGMATCHES(LANG(?o), \"en\"))
+    }"
     let r = (prefixGraph.ExecuteQuery(query) :?> SparqlResultSet)
     r.Results.AddRange(connection.QueryWithResultSet(query).Results)
     r
@@ -132,10 +137,10 @@ let internal composeGraph (connection : SparqlRemoteEndpoint) (conf:Configuratio
             then prefixUris |> List.map(fun (_,y) -> Uri y)
             else []
     
-    // TODO: Make prefixes work again
+    // TODO: Data stored in prefixes should also be downloaded (by dereferencing the prefix uri)
     let prefixes = new Graph() //handlePrefixes userDefinedPrefixes
     [ extractClassesFromStore; extractPropertiesFromStore; extractSubClassRelations; extractDomainRelations; 
-        extractRangeRelations; extractCommentsRelations ] 
+        extractRangeRelations(*; extractCommentsRelations*) ] 
     |> Seq.iter (fun f -> f connection prefixes graph |> Seq.iter (fun t -> (graph.Assert t) |> ignore))
     handleSpecialCases graph
     
@@ -145,35 +150,3 @@ let internal composeGraph (connection : SparqlRemoteEndpoint) (conf:Configuratio
     
     let x = (new RdfXmlWriter())
     x.Save(graph, path)
-    
-//let connection =
-//    new SparqlRemoteEndpoint(new Uri("http://stardog.west.uni-koblenz.de:8080/openrdf-sesame/repositories/Jamendo"))
-//
-//let path = @"C:\Users\Martin\Documents\test.rdf"
-//
-//let p = [
-//    "tags","http://www.holygoat.co.uk/owl/redwood/0.1/tags/"
-//    "dc","http://purl.org/dc/elements/1.1/"
-//    "time","http://www.w3.org/2006/time#"
-//    "tl","http://purl.org/NET/c4dm/timeline.owl#"
-//    "mo","http://purl.org/ontology/mo/"
-//    "foaf","http://xmlns.com/foaf/0.1/"
-//    "event","http://purl.org/NET/c4dm/event.owl#"
-//    "xsd","http://www.w3.org/2001/XMLSchema#"
-//    "rdf","http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-//    "rdfs","http://www.w3.org/2000/01/rdf-schema#"
-//    "dct","http://purl.org/dc/terms/"
-//    "owl","http://www.w3.org/2002/07/owl#"
-//    "vs","http://www.w3.org/2003/06/sw-vocab-status/ns#"
-//    "skos","http://www.w3.org/2004/02/skos/core#"
-//    "tzont","http://www.w3.org/2006/timezone#"
-//    "daml","http://www.daml.org/2001/03/daml+oil#"
-//    "dcterms","http://purl.org/dc/terms/"
-//    "geo","http://www.w3.org/2003/01/geo/wgs84_pos#"
-//    "frbr","http://purl.org/vocab/frbr/core#"
-//    "keys","http://purl.org/NET/c4dm/keys.owl#"
-//    "wot","http://xmlns.com/wot/0.1/"
-//    "ao","http://purl.org/ontology/ao/core#"
-//    "bio","http://purl.org/vocab/bio/0.1/"
-//    "cc","http://web.resource.org/cc/" 
-//]

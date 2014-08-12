@@ -1,6 +1,5 @@
-﻿module Configuration
+﻿module TypeProviderImplementation.Configuration
 
-// TODO: (besonders DICK!!!) - wie gehen wir mit mehren Configs um?
 
 open System
 open System.IO

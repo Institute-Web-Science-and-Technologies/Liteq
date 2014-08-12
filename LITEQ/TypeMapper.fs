@@ -1,6 +1,6 @@
-﻿module TypeMapper
+﻿module TypeProviderImplementation.TypeMapper
 
-open WrapperReimplemented
+open Wrapper
 
 let private xsdMappings = 
     [ "http://www.w3.org/2001/XMLSchema#string", ("string", typeof<string>)
@@ -22,7 +22,7 @@ let mapPrimitiveType rangeUri =
     if xsdMappings.ContainsKey rangeUri then xsdMappings.[rangeUri]
     else ("string", typeof<string>)
 
-// Lots of Xml datatypes are still missing
+// TODO: Add missing XML datatypes
 let internal mapPrimitive propertyUri rangeUri = 
     match rangeUri with
     | "http://www.w3.org/2001/XMLSchema#string" -> 

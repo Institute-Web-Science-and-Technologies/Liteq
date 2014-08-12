@@ -1,6 +1,7 @@
-﻿namespace LITEQ
+﻿namespace TypeProviderImplementation.NPQLProvider
 
-// TODO: foafAgent subClassNav moMusicArtist - fragt die SPARQL query nur nach moMusicArtist oder nach moMusicArtist UND foafAgent
+// TODO: foafAgent v moMusicArtist should only request ?x rdf:type mo:MusicArtist (as this might cause problems with deactivated inferencing)
+
 
 open Microsoft.FSharp.Core.CompilerServices
 open Microsoft.FSharp.Collections
@@ -8,16 +9,17 @@ open ProviderImplementation.ProvidedTypes
 open System.Reflection
 open VDS.RDF.Query
 
-open Schema
-open Configuration
-open WrapperReimplemented
+open TypeProviderImplementation
+open TypeProviderImplementation.Schema
+open TypeProviderImplementation.Configuration
+open TypeProviderImplementation.Wrapper
 
 [<TypeProvider>]
 type NPQLBasedTypeProvider(config : TypeProviderConfig) as this = 
     class
         inherit TypeProviderForNamespaces()
 
-        let ns = "Uniko.West.Liteq.NPQL"
+        let ns = "Uniko.West.Liteq"
         let asm = Assembly.GetExecutingAssembly()
         let provTy = ProvidedTypeDefinition(asm, ns, "NpqlRdfProvider", Some typeof<obj>)
 
@@ -46,7 +48,7 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                                         (accessProperty wrapper propertyUri) :?> string list
                                                         |> List.map 
                                                                 (fun uri -> 
-                                                                WrapperReimplemented.createInstance uri storeUri' updateUri' ) @@> // new RdfResourceWrapper(uri, storeUri', None)) @@>)
+                                                                Wrapper.createInstance uri storeUri' updateUri' ) @@> // new RdfResourceWrapper(uri, storeUri', None)) @@>)
                                         if not isReadOnly then
                                             p.SetterCode <- fun args ->
                                                         <@@ let wrapper = (%%args.[0] : obj) :?> RdfResourceWrapper
@@ -194,46 +196,49 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                      (propertyName = "IsReadOnly", propertyType = typeof<bool>, IsStatic = true, 
                       GetterCode = fun _ -> <@@ isReadOnly @@>))
             // Build types from store
+           
+            let y = s.Classes
             let x = 
-                s.Classes |> List.map (fun (typeUri, typeName, comment) -> 
-                                        let typeDef = 
-                                            ProvidedTypeDefinition
-                                                (className = typeName, baseType = None, HideObjectMethods = true)
-                                        typeDef.AddXmlDoc comment
-                                        typeDef.AddMembersDelayed(fun _ -> buildTypeNavigationOptions typeUri)
-                                        let intension = 
-                                            ProvidedTypeDefinition
-                                                (className = "Intension", baseType = Some typeof<obj>)
-                                        intension.AddMembersDelayed(fun _ -> buildIntension typeUri isReadOnly)
-                                        let storeUri' = storeUri
-                                        let updateUri' = updateUri
+                y |> List.filter(fun (typeUri, _, _) -> typeCache.ContainsKey typeUri |> not) |> List.map (fun (typeUri, typeName, comment) -> 
+                                        if not (typeCache.ContainsKey typeUri) then
+                                            let typeDef = 
+                                                ProvidedTypeDefinition
+                                                    (className = typeName, baseType = None, HideObjectMethods = true)
+                                            typeDef.AddXmlDoc comment
+                                            typeDef.AddMembersDelayed(fun _ -> buildTypeNavigationOptions typeUri)
+                                            let intension = 
+                                                ProvidedTypeDefinition
+                                                    (className = "Intension", baseType = Some typeof<obj>)
+                                            intension.AddMembersDelayed(fun _ -> buildIntension typeUri isReadOnly)
+                                            let storeUri' = storeUri
+                                            let updateUri' = updateUri
 
-                                        let extension = 
-                                            ProvidedProperty
-                                                (propertyName = "Extension", 
-                                                propertyType = typedefof<seq<_>>.MakeGenericType(intension), 
-                                                GetterCode = fun args -> 
-                                                    <@@ let u, v, triples = 
-                                                            (%%args.[0] : obj) :?> string * string * (string * string * string) list
+                                            let extension = 
+                                                ProvidedProperty
+                                                    (propertyName = "Extension", 
+                                                    propertyType = typedefof<seq<_>>.MakeGenericType(intension), 
+                                                    GetterCode = fun args -> 
+                                                        <@@ let u, v, triples = 
+                                                                (%%args.[0] : obj) :?> string * string * (string * string * string) list
                                                   
-                                                        let patternsString = 
-                                                            triples
-                                                            |> List.map 
-                                                                    (fun (s, p, o) -> s + " " + p + " " + o + " .\n")
-                                                            |> List.reduce (fun acc pattern -> acc + pattern)
+                                                            let patternsString = 
+                                                                triples
+                                                                |> List.map 
+                                                                        (fun (s, p, o) -> s + " " + p + " " + o + " .\n")
+                                                                |> List.reduce (fun acc pattern -> acc + pattern)
                                                   
-                                                        let query = 
-                                                            "SELECT " + u + " WHERE {\n" + patternsString + "}"
-                                                        WrapperReimplemented.QueryForInstances u query storeUri' updateUri' @@>)
-                                        //let intension' = ProvidedProperty(propertyName="Intension'", propertyType=factoryThingy)
-                                        extension.AddXmlDoc "Returns all instances that satisfy the query"
-                                        typeDef.AddMembers [ extension :> MemberInfo;
-                                                            intension :> MemberInfo ]
-                                        if not( typeCache.ContainsKey typeUri) then
+                                                            let query = 
+                                                                "SELECT " + u + " WHERE {\n" + patternsString + "}"
+                                                            Wrapper.QueryForInstances u query storeUri' updateUri' @@>)
+                                            //let intension' = ProvidedProperty(propertyName="Intension'", propertyType=factoryThingy)
+                                            extension.AddXmlDoc "Returns all instances that satisfy the query"
+                                            typeDef.AddMembers [ extension :> MemberInfo;
+                                                                intension :> MemberInfo ]
                                             typeCache.Add(typeUri, typeDef)
                                             typeCache.Add(typeUri + "Intension", intension)
                                             typeNames.Add(typeUri, typeName) 
-                                        typeDef)
+                                            typeDef
+                                        else typeCache.[typeUri])
             classes.AddMembers(x)
             
             // Special treatment for rdfs:Literal
@@ -250,66 +255,78 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
             t.AddMembersDelayed(fun _ -> 
                 let query = 
                     ProvidedTypeDefinition(className = "NPQL", baseType = None, HideObjectMethods = true)
-                query.AddMember(ProvidedConstructor(parameters = [], 
-                                                    InvokeCode = fun _ -> 
-                                                        <@@ let u = "?x"
-                                                            let v = "?y"
-                                                            u, v, List.empty<string * string * string> @@>))
+//                query.AddMember(ProvidedConstructor(parameters = [], 
+//                                                    InvokeCode = fun _ -> 
+//                                                        <@@ let u = "?x"
+//                                                            let v = "?y"
+//                                                            u, v, List.empty<string * string * string> @@>))
+//                for KeyValue(typeUri, typeName) in typeNames do
+//                    query.AddMember
+//                        (ProvidedProperty(propertyName = typeName, propertyType = typeCache.[typeUri], 
+//                                          GetterCode = fun args -> 
+//                                              <@@ let u, v, triples = 
+//                                                      (%%args.[0] : obj) :?> string * string * (string * string * string) list
+//                                                  u, v, (u, "a", "<" + typeUri + ">") :: triples @@>))
+
                 for KeyValue(typeUri, typeName) in typeNames do
                     query.AddMember
-                        (ProvidedProperty(propertyName = typeName, propertyType = typeCache.[typeUri], 
+                        (ProvidedProperty(propertyName = typeName, propertyType = typeCache.[typeUri], IsStatic=true, 
                                           GetterCode = fun args -> 
-                                              <@@ let u, v, triples = 
-                                                      (%%args.[0] : obj) :?> string * string * (string * string * string) list
-                                                  u, v, (u, "a", "<" + typeUri + ">") :: triples @@>))
+                                              <@@   let u = "?x"
+                                                    let v = "?y"
+                                                    u, v, [(u, "a", "<" + typeUri + ">")] @@>))
+
+
                 [ query :> MemberInfo ])
             // Build properties from store
             let properties = new ProvidedTypeDefinition("Properties", None)
             t.AddMember properties
             properties.AddMembers( 
-                s.Properties |> List.map (fun (propertyUri, typeName, comment, domain, range) -> 
-                                    let typeDef = 
-                                        ProvidedTypeDefinition
-                                            (className = typeName + "Property", baseType = None, 
-                                             HideObjectMethods = true)
-                                    typeDef.AddXmlDoc comment
-                                    typeDef.AddMembersDelayed
-                                        (fun _ -> buildPropertyNavigationOptions propertyUri)
-                                    if (typeCache.ContainsKey domain) && (typeCache.ContainsKey range) then 
-                                        let tupleDef = 
-                                            typedefof<_ * _>
-                                                .MakeGenericType(typeCache.[domain], typeCache.[range])
-                                        let storeUri' = storeUri
-                                        let updateUri' = updateUri
+                s.Properties |> List.filter(fun (propertyUri, _, _, _, _) -> typeCache.ContainsKey propertyUri |> not) |> List.map (fun (propertyUri, typeName, comment, domain, range) -> 
+                                    if not (typeCache.ContainsKey propertyUri) then
+                                        let typeDef = 
+                                            ProvidedTypeDefinition
+                                                (className = typeName + "Property", baseType = None, 
+                                                 HideObjectMethods = true)
+                                        typeDef.AddXmlDoc comment
+                                        typeDef.AddMembersDelayed
+                                            (fun _ -> buildPropertyNavigationOptions propertyUri)
+                                        if (typeCache.ContainsKey domain) && (typeCache.ContainsKey range) then 
+                                            let tupleDef = 
+                                                typedefof<_ * _>
+                                                    .MakeGenericType(typeCache.[domain], typeCache.[range])
+                                            let storeUri' = storeUri
+                                            let updateUri' = updateUri
 
-                                        let extension = 
-                                            ProvidedProperty
-                                                (propertyName = "Extension", 
-                                                 propertyType = typedefof<seq<_>>.MakeGenericType(tupleDef), //typeCache.[domain], typeCache.[range]),//propertyType=typeof<string>,
+                                            let extension = 
+                                                ProvidedProperty
+                                                    (propertyName = "Extension", 
+                                                     propertyType = typedefof<seq<_>>.MakeGenericType(tupleDef), //typeCache.[domain], typeCache.[range]),//propertyType=typeof<string>,
                                                                                                              
-                                                 GetterCode = fun args -> 
-                                                     <@@ 
-                                                         let u, v, triples = 
-                                                             (%%args.[0] : obj) :?> string * string * (string * string * string) list
+                                                     GetterCode = fun args -> 
+                                                         <@@ 
+                                                             let u, v, triples = 
+                                                                 (%%args.[0] : obj) :?> string * string * (string * string * string) list
                                                          
-                                                         let patternsString = 
-                                                             triples
-                                                             |> List.map 
-                                                                    (fun (s, p, o) -> 
-                                                                    s + " " + p + " " + o + " .\n")
-                                                             |> List.reduce (fun acc pattern -> acc + pattern)
+                                                             let patternsString = 
+                                                                 triples
+                                                                 |> List.map 
+                                                                        (fun (s, p, o) -> 
+                                                                        s + " " + p + " " + o + " .\n")
+                                                                 |> List.reduce (fun acc pattern -> acc + pattern)
                                                          
-                                                         let u' = u + "x"
-                                                         let query = 
-                                                             "SELECT " + u + " " + u' + " WHERE {\n" 
-                                                             + patternsString + "}"
-                                                         WrapperReimplemented.QueryForTuples (u, u') query storeUri' updateUri' @@>)
-                                        extension.AddXmlDoc "Returns all instances that satisfy the query"
-                                        typeDef.AddMembers [ extension ]
-                                    if not(typeCache.ContainsKey propertyUri) then
+                                                             let u' = u + "x"
+                                                             let query = 
+                                                                 "SELECT " + u + " " + u' + " WHERE {\n" 
+                                                                 + patternsString + "}"
+                                                             Wrapper.QueryForTuples (u, u') query storeUri' updateUri' @@>)
+                                            extension.AddXmlDoc "Returns all instances that satisfy the query"
+                                            typeDef.AddMembers [ extension ]
+                                        
                                         typeCache.Add(propertyUri, typeDef)
                                         typeNames.Add(propertyUri, typeName)
-                                    typeDef))
+                                        typeDef
+                                    else typeCache.[propertyUri]))
             t
         
         let parameters = 

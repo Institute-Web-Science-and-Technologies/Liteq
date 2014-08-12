@@ -1,4 +1,4 @@
-﻿module Logger
+﻿module TypeProviderImplementation.Logger
  
 open System.Diagnostics
  

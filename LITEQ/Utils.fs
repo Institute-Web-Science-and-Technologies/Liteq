@@ -1,12 +1,30 @@
-﻿module NameUtils
+﻿module TypeProviderImplementation.Utils
 
-// NameUtils originally comes frmo FSharp.Data (https://github.com/fsharp/FSharp.Data/blob/master/src/CommonRuntime/NameUtils.fs)
+open System
+open System.Collections.Concurrent
+open System.Collections.Generic
+
+
+// Originally comes from FSharp.Data
 // TODO: Find out what legal stuff is necessary to include (just a link and a source code comment, can we just use the modules by
 // relying on FSharp.Data, and so on... )
 
-open System
-open System.Globalization
-open System.Collections.Generic
+type ICache<'T> = 
+    abstract TryRetrieve : string -> 'T option
+    abstract Set : string * 'T -> 'T
+
+let createInMemoryCache() = 
+    let dict = new ConcurrentDictionary<_, _>()
+    { new ICache<_> with
+          
+          member __.Set(key, value) = 
+              dict.[key] <- value
+              value
+          
+          member __.TryRetrieve(key) = 
+              match dict.TryGetValue(key) with
+              | true, value -> Some value
+              | _ -> None }
 
 // --------------------------------------------------------------------------------------
 // Active patterns & operators for parsing strings

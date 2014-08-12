@@ -1,32 +1,14 @@
-﻿module WrapperReimplemented
+﻿module TypeProviderImplementation.Wrapper
 
 open System
+open TypeProviderImplementation.Utils
 open VDS.RDF.Query
 open VDS.RDF.Storage
 open VDS.RDF.Update
 open System.Collections.Concurrent
 open System.Collections.Generic
 
-// ICache originally comes frmo FSharp.Data (https://github.com/fsharp/FSharp.Data/blob/master/src/CommonRuntime/Caching.fs)
-// TODO: Find out what legal stuff is necessary to include (just a link and a source code comment, can we just use the modules by
-// relying on FSharp.Data, and so on... )
 
-type ICache<'T> = 
-    abstract TryRetrieve : string -> 'T option
-    abstract Set : string * 'T -> 'T
-
-let createInMemoryCache() = 
-    let dict = new ConcurrentDictionary<_, _>()
-    { new ICache<_> with
-          
-          member __.Set(key, value) = 
-              dict.[key] <- value
-              value
-          
-          member __.TryRetrieve(key) = 
-              match dict.TryGetValue(key) with
-              | true, value -> Some value
-              | _ -> None }
 
 let queryCache : ICache<SparqlRemoteEndpoint> = createInMemoryCache()
 let updateCache: ICache<SparqlRemoteUpdateEndpoint> = createInMemoryCache()
@@ -46,7 +28,6 @@ type ValueType =
     | URI
     | LITERAL
 
-// TODO: Implement equality
 [<StructuredFormatDisplay("{InstanceUri}")>]
 type RdfResourceWrapper(instanceUri, queryUri, updateUri:string option) = 
     class
@@ -62,7 +43,6 @@ type RdfResourceWrapper(instanceUri, queryUri, updateUri:string option) =
                 let con = queryCreateOrRetrieve queryUri
                 if not ((con.QueryWithResultSet query).Result) then
                     (updateCreateOrRetrieve updateUri.Value).Update("INSERT DATA { <" + (Uri instanceUri).ToString() + "> a <" + (Uri typeUri).ToString() + "> . }")
-
             RdfResourceWrapper(instanceUri, queryUri, updateUri)
         member __.InstanceUri = instanceUri
         
@@ -102,7 +82,12 @@ type RdfResourceWrapper(instanceUri, queryUri, updateUri:string option) =
                     |> String.concat ""
                 let query = "INSERT DATA { " + updatePattern + " }"
                 updateConnection.Value.Update query
-
+        
+        override __.Equals(other) = 
+            match other with
+            | :? RdfResourceWrapper as o -> o.InstanceUri = __.InstanceUri
+            | _ -> false
+        override __.GetHashCode() = __.InstanceUri.GetHashCode()
     end
 
 let createInstance instanceUri queryUri (updateUri: string) = 
@@ -122,7 +107,6 @@ let setProperty (wrapper:RdfResourceWrapper) (propertyUri:string) (values:System
     let values' = values :?> string list
     wrapper.[propertyUri] <- values'
 
-// TODO: Add updateUri
 let QueryForInstances (u : string) (query : string) (queryUri : string) (updateUri:string) = 
     let u' = u.Replace("?","")
     let rec fetchNextOnes (offset : int) (limit : int) = 
@@ -146,7 +130,7 @@ let QueryForTuples (u : string, v : string) (query : string) (queryUri : string)
                 |> Seq.map (fun r -> r.[u'].ToString(), r.[v'].ToString())
             for (u_instance, v_instance) in instances do
                 yield createInstance u_instance queryUri updateUri, 
-                      createInstance u_instance queryUri updateUri  
+                      createInstance v_instance queryUri updateUri  
             if (Seq.length instances) = limit then yield! fetchNextOnes (offset + limit) limit
         }
     fetchNextOnes 0 1000

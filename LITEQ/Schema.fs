@@ -1,10 +1,10 @@
-﻿module Schema
+﻿module TypeProviderImplementation.Schema
 
 open System
 open VDS.RDF.Query
 open VDS.RDF.Parsing
 open VDS.RDF
-open Configuration
+open TypeProviderImplementation.Configuration
 
 // Funktioniert 👍
 type IStore = 
@@ -26,7 +26,7 @@ type LocalSchema(path : string) =
     class
         let graph = new Graph()
         let mutable namespaces = List.empty<string*string> //Configuration.prefixes
-        let niceName = NameUtils.uniqueGeneratorForUri NameUtils.niceCamelName
+        let niceName = Utils.uniqueGeneratorForUri Utils.niceCamelName
         let logger = new Logger.Logger(Configuration.DEFAULT_LOG_LEVEL)
 
         let makeComment (r : SparqlResult) = 
@@ -47,8 +47,7 @@ type LocalSchema(path : string) =
                         |> Seq.toList
             with 
                 | _ -> 
-                    failwith "Failed to parse the previously created schema file"
-                        
+                    failwith "Failed to parse the previously created schema file"               
         
         //TODO: Think about removing this function from this class and put it into a utils class
         member __.makeLabel (uri : string) = 
@@ -66,9 +65,13 @@ type LocalSchema(path : string) =
 
             member __.Classes = 
                 let query = "SELECT DISTINCT ?class ?comment WHERE {
-                    ?class a <http://www.w3.org/2000/01/rdf-schema#Class> .
-                    OPTIONAL { ?class <http://www.w3.org/2000/01/rdf-schema#comment> ?comment . }  
-                }"
+                    { ?class a <http://www.w3.org/2000/01/rdf-schema#Class> . } UNION { ?class a <http://www.w3.org/2002/07/owl#Class> . }
+                    OPTIONAL {
+                        ?class <http://www.w3.org/2000/01/rdf-schema#comment> ?comment .
+                        FILTER(LANG(?comment) = \"\" || LANGMATCHES(LANG(?comment), \"en\"))
+                    }  
+                }
+                "
                 (graph.ExecuteQuery(new SparqlParameterizedString(query)) :?> SparqlResultSet)
                 |> Seq.map (fun r -> 
                        let uri = r.["class"].ToString()
@@ -81,8 +84,12 @@ type LocalSchema(path : string) =
                 let query = "SELECT DISTINCT ?uri ?comment ?domain ?range WHERE {
                     ?uri <http://www.w3.org/2000/01/rdf-schema#domain> ?domain .
                     ?uri <http://www.w3.org/2000/01/rdf-schema#range> ?range .
-                    OPTIONAL { ?uri <http://www.w3.org/2000/01/rdf-schema#comment> ?comment . }
-                }"
+                    OPTIONAL {
+                        ?uri <http://www.w3.org/2000/01/rdf-schema#comment> ?comment .
+                        FILTER(LANG(?comment) = \"\" || LANGMATCHES(LANG(?comment), \"en\"))
+                    }
+                }
+                "
                 (graph.ExecuteQuery(new SparqlParameterizedString(query)) :?> SparqlResultSet)
                 |> Seq.map (fun r -> 
                        let uri = r.["uri"].ToString()
@@ -103,7 +110,10 @@ type LocalSchema(path : string) =
                     } UNION {
                         ?uri <http://www.w3.org/2000/01/rdf-schema#domain> <http://www.w3.org/2002/07/owl#Thing> .
                         ?uri <http://www.w3.org/2000/01/rdf-schema#range> ?range .
-                        OPTIONAL { ?uri <http://www.w3.org/2000/01/rdf-schema#comment> ?comment . }
+                        OPTIONAL {
+                            ?uri <http://www.w3.org/2000/01/rdf-schema#comment> ?comment .
+                            FILTER(LANG(?comment) = \"\" || LANGMATCHES(LANG(?comment), \"en\"))
+                        }
                     }
                 }"
                 let parameterizedQuery = new SparqlParameterizedString(query)
