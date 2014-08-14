@@ -66,12 +66,6 @@
     <Compile Include="NPQLTypeProvider.fs" />
     <Compile Include="PropertyBasedTypeProvider.fs" />
     <None Include="packages.config" />
-    <None Include="liteq_default.ini">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="prefixes.ini">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="dotNetRDF">
