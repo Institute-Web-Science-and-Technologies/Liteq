@@ -61,9 +61,8 @@ type LocalSchema(path : string) =
             f uri namespaces
 
         interface IStore with
-
-
             member __.Classes = 
+               
                 let query = "SELECT DISTINCT ?class ?comment WHERE {
                     { ?class a <http://www.w3.org/2000/01/rdf-schema#Class> . } UNION { ?class a <http://www.w3.org/2002/07/owl#Class> . }
                     OPTIONAL {
