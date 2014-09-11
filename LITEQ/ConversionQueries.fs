@@ -132,11 +132,7 @@ let internal composeGraph (connection : SparqlRemoteEndpoint) (conf:Configuratio
     let path = conf.FindConfValue "schemaFile" 
     let prefixUris = conf.Prefixes  
     let graph = new Graph()
-    let userDefinedPrefixes = 
-        if conf.HasConfValue KEY_GATHER_PREFIX_DATA && (bool.Parse(conf.FindConfValue KEY_GATHER_PREFIX_DATA))
-            then prefixUris |> List.map(fun (_,y) -> Uri y)
-            else []
-    
+
     // TODO: Data stored in prefixes should also be downloaded (by dereferencing the prefix uri)
     let prefixes = new Graph() //handlePrefixes userDefinedPrefixes
     [ extractClassesFromStore; extractPropertiesFromStore; extractSubClassRelations; extractDomainRelations; 

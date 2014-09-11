@@ -174,16 +174,27 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                        u', v, (u', "a", "<" + propertyRange + ">") :: triples @@>) ]
         
         let buildTypes (typeName : string) (args : obj []) = 
-            let configFilePath = args.[0] :?> string
+            let configFilePath = args.[0] :?> string 
+
             if store.IsNone then 
-                let conf = Configuration(configFilePath)
-                let x = System.IO.Path.GetFullPath(configFilePath)
-                storeUri <- conf.FindConfValue KEY_SERVER_URI
-                if conf.HasConfValue KEY_UPDATE_URI then
-                    updateUri <- conf.FindConfValue KEY_UPDATE_URI
-                if not(System.IO.File.Exists (conf.FindConfValue KEY_SCHEMA_FILE) ) then
-                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf 
-                store <- Some(Schema.LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
+                if configFilePath = "" |> not then
+                    let conf = Configuration(configFilePath)
+                    let x = System.IO.Path.GetFullPath(configFilePath)
+                    storeUri <- conf.FindConfValue KEY_SERVER_URI
+                    if conf.HasConfValue KEY_UPDATE_URI then
+                        updateUri <- conf.FindConfValue KEY_UPDATE_URI
+                    if not(System.IO.File.Exists (conf.FindConfValue KEY_SCHEMA_FILE) ) then
+                        ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf 
+                    store <- Some(Schema.LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
+                else
+                    storeUri <- args.[1] :?> string
+                    if args.[2] :?> string = "" |> not then
+                        updateUri <- args.[2] :?> string
+                    // TODO: I think it would be best if the create a conf anyway and then set the values by hand 
+                    //if not(System.IO.File.Exists (args.[3] :?> string) ) then
+                    //    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf 
+                    //store <- Some(Schema.LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
+
 
             let s = store.Value
             let isReadOnly = (updateUri = "")
@@ -200,6 +211,7 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
             let y = s.Classes
             let x = 
                 y |> List.filter(fun (typeUri, _, _) -> typeCache.ContainsKey typeUri |> not) |> List.map (fun (typeUri, typeName, comment) -> 
+                                    try
                                         if not (typeCache.ContainsKey typeUri) then
                                             let typeDef = 
                                                 ProvidedTypeDefinition
@@ -238,7 +250,10 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                             typeCache.Add(typeUri + "Intension", intension)
                                             typeNames.Add(typeUri, typeName) 
                                             typeDef
-                                        else typeCache.[typeUri])
+                                        else typeCache.[typeUri]
+                                    with
+                                        | _ -> failwith ("some error on " + typeUri) 
+                                        )
             classes.AddMembers(x)
             
             // Special treatment for rdfs:Literal
@@ -281,56 +296,72 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
             // Build properties from store
             let properties = new ProvidedTypeDefinition("Properties", None)
             t.AddMember properties
-            properties.AddMembers( 
-                s.Properties |> List.filter(fun (propertyUri, _, _, _, _) -> typeCache.ContainsKey propertyUri |> not) |> List.map (fun (propertyUri, typeName, comment, domain, range) -> 
-                                    if not (typeCache.ContainsKey propertyUri) then
-                                        let typeDef = 
-                                            ProvidedTypeDefinition
-                                                (className = typeName + "Property", baseType = None, 
-                                                 HideObjectMethods = true)
-                                        typeDef.AddXmlDoc comment
-                                        typeDef.AddMembersDelayed
-                                            (fun _ -> buildPropertyNavigationOptions propertyUri)
-                                        if (typeCache.ContainsKey domain) && (typeCache.ContainsKey range) then 
-                                            let tupleDef = 
-                                                typedefof<_ * _>
-                                                    .MakeGenericType(typeCache.[domain], typeCache.[range])
-                                            let storeUri' = storeUri
-                                            let updateUri' = updateUri
+            let x = s.Properties
+            let props = 
+                x
+                |> List.filter(fun (propertyUri, _, _, _, _) -> typeCache.ContainsKey propertyUri |> not)
+                |> List.mapi (fun i (propertyUri, typeName, comment, domain, range) ->
+                    let blah = propertyUri
+                    if not (typeCache.ContainsKey propertyUri) then
+                        let typeDef = 
+                            ProvidedTypeDefinition
+                                (className = typeName + "Property", baseType = None, 
+                                    HideObjectMethods = true)
+                        typeDef.AddXmlDoc comment
+                        typeDef.AddMembersDelayed
+                            (fun _ -> buildPropertyNavigationOptions propertyUri)
+                        (*if (typeCache.ContainsKey domain) && (typeCache.ContainsKey range) then 
+                            let tupleDef = 
+                                typedefof<_ * _>
+                                    .MakeGenericType(typeCache.[domain], typeCache.[range])
+                            let storeUri' = storeUri
+                            let updateUri' = updateUri
 
-                                            let extension = 
-                                                ProvidedProperty
-                                                    (propertyName = "Extension", 
-                                                     propertyType = typedefof<seq<_>>.MakeGenericType(tupleDef), //typeCache.[domain], typeCache.[range]),//propertyType=typeof<string>,
+                            let extension = 
+                                ProvidedProperty
+                                    (propertyName = "Extension", 
+                                        propertyType = typedefof<seq<_>>.MakeGenericType(tupleDef), //typeCache.[domain], typeCache.[range]),//propertyType=typeof<string>,
                                                                                                              
-                                                     GetterCode = fun args -> 
-                                                         <@@ 
-                                                             let u, v, triples = 
-                                                                 (%%args.[0] : obj) :?> string * string * (string * string * string) list
+                                        GetterCode = fun args -> 
+                                            <@@ 
+                                                let u, v, triples = 
+                                                    (%%args.[0] : obj) :?> string * string * (string * string * string) list
                                                          
-                                                             let patternsString = 
-                                                                 triples
-                                                                 |> List.map 
-                                                                        (fun (s, p, o) -> 
-                                                                        s + " " + p + " " + o + " .\n")
-                                                                 |> List.reduce (fun acc pattern -> acc + pattern)
+                                                let patternsString = 
+                                                    triples
+                                                    |> List.map 
+                                                        (fun (s, p, o) -> 
+                                                        s + " " + p + " " + o + " .\n")
+                                                    |> List.reduce (fun acc pattern -> acc + pattern)
                                                          
-                                                             let u' = u + "x"
-                                                             let query = 
-                                                                 "SELECT " + u + " " + u' + " WHERE {\n" 
-                                                                 + patternsString + "}"
-                                                             Wrapper.QueryForTuples (u, u') query storeUri' updateUri' @@>)
-                                            extension.AddXmlDoc "Returns all instances that satisfy the query"
-                                            typeDef.AddMembers [ extension ]
-                                        
-                                        typeCache.Add(propertyUri, typeDef)
-                                        typeNames.Add(propertyUri, typeName)
-                                        typeDef
-                                    else typeCache.[propertyUri]))
+                                                let u' = u + "x"
+                                                let query = 
+                                                    "SELECT " + u + " " + u' + " WHERE {\n" 
+                                                    + patternsString + "}"
+                                                Wrapper.QueryForTuples (u, u') query storeUri' updateUri' @@>)
+                            extension.AddXmlDoc "Returns all instances that satisfy the query"
+                            typeDef.AddMembers [ extension ]*)
+                                   
+                        typeCache.Add(propertyUri, typeDef)
+                        typeNames.Add(propertyUri, typeName)
+                        typeDef
+                    else typeCache.[propertyUri])
+                |> List.fold(fun acc x ->
+                    if List.exists (fun x' -> x' = x) acc
+                        then acc
+                        else x :: acc
+                    ) []
+                //|> properties.AddMembers
+           
+            properties.AddMembers props
             t
         
         let parameters = 
-            [ ProvidedStaticParameter("configurationFile", typeof<string>, "./liteq_default.ini") ]
+            [ ProvidedStaticParameter("configurationFile", typeof<string>, "");
+              ProvidedStaticParameter("queryUri", typeof<string>, "");
+              ProvidedStaticParameter("updateUri", typeof<string>, "");
+              ProvidedStaticParameter("schemaFile", typeof<string>, "");
+              ProvidedStaticParameter("prefixFile", typeof<string>, "") ]
         do provTy.DefineStaticParameters(parameters, buildTypes)
         do this.AddNamespace(ns, [ provTy; temporaryClasses ])  
     end

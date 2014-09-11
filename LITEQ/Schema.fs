@@ -97,6 +97,7 @@ type LocalSchema(path : string) =
                        let domain = r.["domain"].ToString()
                        let range = r.["range"].ToString()
                        uri, label, comment, domain, range)
+                |> Seq.filter(fun (x,_,_,_,_) -> not (x = null))
                 |> Seq.toList
             
             member __.PropertiesForType typeUri = 

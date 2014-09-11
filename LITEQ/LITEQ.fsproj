@@ -24,8 +24,8 @@
     <DocumentationFile>bin\Debug\LITEQ.XML</DocumentationFile>
     <StartAction>Program</StartAction>
     <StartProgram>C:\Program Files (x86)\Microsoft Visual Studio 12.0\Common7\IDE\devenv.exe</StartProgram>
-    <StartArguments>"C:\Users\Martin\Documents\Visual Studio 2012\Projects\LITEQ\RDF-TP-V3\Testing\Example.sln"</StartArguments>
-    <StartWorkingDirectory>C:\Users\Martin\Documents\Visual Studio 2012\Projects\LITEQ\RDF-TP-V3\Testing\Testing\</StartWorkingDirectory>
+    <StartArguments>"C:\Users\Martin\Documents\Visual Studio 2013\Projects\LiteqDebuggingProject\LiteqDebuggingProject.sln"</StartArguments>
+    <StartWorkingDirectory>C:\Users\Martin\Documents\Visual Studio 2013\Projects\LinqFSharpTesting\LinqFSharpTesting\</StartWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -53,9 +53,9 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" Condition="Exists('$(FSharpTargetsPath)')" />
   <ItemGroup>
-    <Compile Include="ProvidedTypes\Signatures\ProvidedTypes.fsi" />
-    <Compile Include="ProvidedTypes\Code\ProvidedTypes.fs" />
-    <Compile Include="ProvidedTypes\Code\Debug.fs" />
+    <Compile Include="ProvidedTypes.fsi" />
+    <Compile Include="ProvidedTypes.fs" />
+    <Compile Include="DebugProvidedTypes.fs" />
     <Compile Include="Logger.fs" />
     <Compile Include="Utils.fs" />
     <Compile Include="Configuration.fs" />
@@ -69,14 +69,10 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="dotNetRDF">
-      <HintPath>packages\dotNetRDF.1.0.5.3315\lib\net40\dotNetRDF.dll</HintPath>
+      <HintPath>packages\dotNetRDF.1.0.6.3421\lib\net40\dotNetRDF.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="FSharp.Data">
-      <HintPath>..\packages\FSharp.Data.2.0.5\lib\net40\FSharp.Data.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="HtmlAgilityPack">
