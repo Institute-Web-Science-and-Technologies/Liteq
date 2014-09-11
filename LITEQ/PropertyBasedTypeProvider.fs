@@ -23,20 +23,22 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
         let provTy = ProvidedTypeDefinition(asm, ns, "PropertyBasedRdfProvider", Some typeof<obj>)
         let propertyTypeCache = new Dictionary<string, ValueType>()
         let mutable store : IStore option = None
-        let mutable storeUri = ""
-        let mutable updateUri = ""
+        let mutable conf: Configuration option = None
+        let mutable isReadOnly = false
+
         let mutable makeLabel : string -> string = id
+
         
         let getPropertyType (p : Property) = 
             if propertyTypeCache.ContainsKey p then propertyTypeCache.[p]
             else 
-                let v = Wrapper.ProbingQuery p storeUri
+                let v = Wrapper.ProbingQuery p conf.Value.ServerUri
                 propertyTypeCache.[p] <- v
                 v
         
         let convertToProperty (p : Property) = 
-            let storeUri' = storeUri
-            let updateUri' = updateUri
+            let storeUri' = conf.Value.ServerUri
+            let updateUri' = conf.Value.UpdateUri
             match getPropertyType p with
             | URI -> 
                 let prov = 
@@ -47,7 +49,7 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                     <@@ let wrapper = (%%args.[0] : RdfResourceWrapper)
                         (accessProperty wrapper p) :?> string list 
                         |> List.map (fun uri -> Wrapper.createInstance uri storeUri' updateUri' :?> RdfResourceWrapper) @@>
-                if not (updateUri = "") then 
+                if isReadOnly then 
                     prov.SetterCode <- fun args -> 
                         <@@ let wrapper = (%%args.[0] : RdfResourceWrapper)
                             let values = (%%args.[1] : RdfResourceWrapper list)
@@ -60,7 +62,7 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                 prov.GetterCode <- fun args -> 
                     <@@ let wrapper = (%%args.[0] : RdfResourceWrapper)
                         (accessProperty wrapper p) :?> string list @@>
-                if not (updateUri = "") then 
+                if isReadOnly then 
                     prov.SetterCode <- fun args -> 
                         <@@ let wrapper = (%%args.[0] : RdfResourceWrapper)
                             let values = (%%args.[1] : string list)
@@ -68,8 +70,8 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                 prov
         
         let createUnspecifcType (previouslyChosen : Property list) = 
-            let storeUri' = storeUri
-            let updateUri' = updateUri
+            let storeUri' = conf.Value.ServerUri
+            let updateUri' = conf.Value.UpdateUri
             let t = ProvidedTypeDefinition("Unnamed", baseType = Some typeof<RdfResourceWrapper>)
             let extensionQuery = "SELECT DISTINCT ?s WHERE { " + Transform previouslyChosen + " }" //makeSubjectQueryWithType previouslyChosen classUri
             t.AddMember
@@ -81,7 +83,7 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
             previouslyChosen
             |> Seq.map convertToProperty
             |> Seq.iter t.AddMember
-            if not (updateUri = "") then 
+            if isReadOnly then 
                 t.AddMember
                     (new ProvidedConstructor(parameters = [ ProvidedParameter
                                                                 (parameterName = "instanceUri", 
@@ -93,8 +95,8 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
             t
         
         let createIntersectionTypes (previouslyChosen : Property list) = 
-            let storeUri' = storeUri
-            let updateUri' = updateUri
+            let storeUri' = conf.Value.ServerUri
+            let updateUri' = conf.Value.UpdateUri
             let container = ProvidedTypeDefinition("Named", baseType = None)
             container.AddMembersDelayed(fun _ -> 
                 Wrapper.TypesOfInstances previouslyChosen storeUri'
@@ -109,12 +111,12 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                                  GetterCode = fun _ -> 
                                      <@@ Wrapper.QueryForInstancesWithoutCasting "?s" extensionQuery storeUri' 
                                              updateUri' @@>))
-                       Wrapper.PropertiesWith classUri storeUri
+                       Wrapper.PropertiesWith classUri conf.Value.ServerUri
                        |> Set.ofSeq
                        |> Set.union (previouslyChosen |> Set.ofSeq)
                        |> Seq.map convertToProperty
                        |> Seq.iter t.AddMember
-                       if not (updateUri = "") then 
+                       if isReadOnly then 
                            t.AddMember
                                (new ProvidedConstructor(parameters = [ ProvidedParameter
                                                                            (parameterName = "instanceUri", 
@@ -132,7 +134,7 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                 let previouslyChosen' = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" :: previouslyChosen
                 let contains l x = l |> List.exists ((=) x)
                 queryResults |> Seq.filter (fun x -> not (contains previouslyChosen' x))
-            Wrapper.PropertiesOccuringWithProperties previouslyChosen storeUri
+            Wrapper.PropertiesOccuringWithProperties previouslyChosen conf.Value.ServerUri
             |> (filter previouslyChosen)
             |> Seq.map (fun property -> 
                    let x = ProvidedTypeDefinition(className = makeLabel property, baseType = None)
@@ -143,22 +145,30 @@ type PropertyBasedTypeProvider(config : TypeProviderConfig) as this =
                    x :> MemberInfo)
             |> Seq.toList
         
-        let buildTypes (typeName : string) (configFile : string) = 
-            if store.IsNone then 
-                let conf = Configuration(configFile)
-                storeUri <- conf.FindConfValue KEY_SERVER_URI
-                if conf.HasConfValue KEY_UPDATE_URI then updateUri <- conf.FindConfValue KEY_UPDATE_URI
-                if not (System.IO.File.Exists(conf.FindConfValue KEY_SCHEMA_FILE)) then 
-                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf
-                store <- Some(LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
+        let buildTypes (typeName : string) (args : obj []) = 
+            if conf.IsNone then 
+                
+                conf <- Some ( Configuration.CreateFromArgs(args) )
+                isReadOnly <- String.IsNullOrWhiteSpace conf.Value.UpdateUri || 
+                                not ( Uri.IsWellFormedUriString( conf.Value.UpdateUri, UriKind.Absolute ) )
+
+                if not (System.IO.File.Exists(conf.Value.SchemaFile)) then 
+                    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri conf.Value.ServerUri)) conf.Value
+                store <- Some(LocalSchema(conf.Value.SchemaFile) :> IStore)
                 makeLabel <- (store.Value :?> LocalSchema).makeLabel
+
             let t = ProvidedTypeDefinition(className = typeName, baseType = None)
             provTy.AddMember t
             t.AddMembersDelayed(fun _ -> makeNestedTypes [])
             t
-        
-        let parameters = [ ProvidedStaticParameter("configFile", typeof<string>) ]
-        do provTy.DefineStaticParameters(parameters, fun typeName args -> buildTypes typeName (args.[0] :?> string))
+ 
+        let parameters = [ ProvidedStaticParameter("configFile", typeof<string>, "");
+                           ProvidedStaticParameter("serverUri", typeof<string>, "");
+                           ProvidedStaticParameter("updateUri", typeof<string>, "");
+                           ProvidedStaticParameter("schemaFile", typeof<string>, "");
+                           ProvidedStaticParameter("prefixFile", typeof<string>, "")
+                            ]
+        do provTy.DefineStaticParameters( parameters, buildTypes )
         do this.AddNamespace(ns, [ provTy ])
     end
 

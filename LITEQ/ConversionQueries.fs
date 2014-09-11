@@ -129,7 +129,7 @@ let internal handlePrefixes (definedPrefixes:Uri list) =
 
 // Works 👍 
 let internal composeGraph (connection : SparqlRemoteEndpoint) (conf:Configuration) =
-    let path = conf.FindConfValue "schemaFile" 
+    let path = conf.SchemaFile 
     let prefixUris = conf.Prefixes  
     let graph = new Graph()
 

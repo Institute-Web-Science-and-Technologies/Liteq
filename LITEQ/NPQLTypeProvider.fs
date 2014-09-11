@@ -8,7 +8,7 @@ open Microsoft.FSharp.Collections
 open ProviderImplementation.ProvidedTypes
 open System.Reflection
 open VDS.RDF.Query
-
+open System
 open TypeProviderImplementation
 open TypeProviderImplementation.Schema
 open TypeProviderImplementation.Configuration
@@ -26,15 +26,14 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
         let temporaryClasses = ProvidedTypeDefinition(asm, ns, "Temporary classes", None)
         let typeCache = System.Collections.Generic.Dictionary<string, ProvidedTypeDefinition>()
         let typeNames = System.Collections.Generic.Dictionary<string, string>()
-        let mutable storeUri = ""
-        let mutable updateUri = ""
+        let mutable conf : Configuration option = None
         let mutable store = None
         
         let buildIntension (typeUri : string) (isReadOnly : bool) = 
             let store' : IStore = store.Value
             let propertiesForType = store'.PropertiesForType typeUri
-            let storeUri' = storeUri
-            let updateUri' = updateUri     
+            let storeUri' = conf.Value.ServerUri
+            let updateUri' = conf.Value.UpdateUri     
                    
             let properties = 
                 propertiesForType
@@ -174,30 +173,19 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                        u', v, (u', "a", "<" + propertyRange + ">") :: triples @@>) ]
         
         let buildTypes (typeName : string) (args : obj []) = 
-            let configFilePath = args.[0] :?> string 
+            if conf.IsNone then 
 
-            if store.IsNone then 
-                if configFilePath = "" |> not then
-                    let conf = Configuration(configFilePath)
-                    let x = System.IO.Path.GetFullPath(configFilePath)
-                    storeUri <- conf.FindConfValue KEY_SERVER_URI
-                    if conf.HasConfValue KEY_UPDATE_URI then
-                        updateUri <- conf.FindConfValue KEY_UPDATE_URI
-                    if not(System.IO.File.Exists (conf.FindConfValue KEY_SCHEMA_FILE) ) then
-                        ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf 
-                    store <- Some(Schema.LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
-                else
-                    storeUri <- args.[1] :?> string
-                    if args.[2] :?> string = "" |> not then
-                        updateUri <- args.[2] :?> string
-                    // TODO: I think it would be best if the create a conf anyway and then set the values by hand 
-                    //if not(System.IO.File.Exists (args.[3] :?> string) ) then
-                    //    ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri storeUri)) conf 
-                    //store <- Some(Schema.LocalSchema(conf.FindConfValue KEY_SCHEMA_FILE) :> IStore)
+                conf <- Some ( Configuration.CreateFromArgs(args) )
+
+                if not(System.IO.File.Exists (conf.Value.SchemaFile) )
+                     then ConversionQueries.composeGraph (new SparqlRemoteEndpoint(System.Uri conf.Value.ServerUri)) conf.Value 
+                store <- Some(Schema.LocalSchema(conf.Value.SchemaFile) :> IStore)
+
 
 
             let s = store.Value
-            let isReadOnly = (updateUri = "")
+            let isReadOnly = String.IsNullOrWhiteSpace conf.Value.UpdateUri || 
+                                not ( Uri.IsWellFormedUriString( conf.Value.UpdateUri, UriKind.Absolute ) )
             let t = ProvidedTypeDefinition(className = typeName, baseType = Some typeof<obj>)
             provTy.AddMember t
             let classes = ProvidedTypeDefinition("Classes", None)
@@ -222,8 +210,8 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
                                                 ProvidedTypeDefinition
                                                     (className = "Intension", baseType = Some typeof<obj>)
                                             intension.AddMembersDelayed(fun _ -> buildIntension typeUri isReadOnly)
-                                            let storeUri' = storeUri
-                                            let updateUri' = updateUri
+                                            let storeUri' = conf.Value.ServerUri
+                                            let updateUri' = conf.Value.UpdateUri
 
                                             let extension = 
                                                 ProvidedProperty
@@ -357,11 +345,11 @@ type NPQLBasedTypeProvider(config : TypeProviderConfig) as this =
             t
         
         let parameters = 
-            [ ProvidedStaticParameter("configurationFile", typeof<string>, "");
-              ProvidedStaticParameter("queryUri", typeof<string>, "");
-              ProvidedStaticParameter("updateUri", typeof<string>, "");
-              ProvidedStaticParameter("schemaFile", typeof<string>, "");
-              ProvidedStaticParameter("prefixFile", typeof<string>, "") ]
+            [   ProvidedStaticParameter("configFile", typeof<string>, "");
+                ProvidedStaticParameter("serverUri", typeof<string>, "");
+                ProvidedStaticParameter("updateUri", typeof<string>, "");
+                ProvidedStaticParameter("schemaFile", typeof<string>, "");
+                ProvidedStaticParameter("prefixFile", typeof<string>, "")]
         do provTy.DefineStaticParameters(parameters, buildTypes)
         do this.AddNamespace(ns, [ provTy; temporaryClasses ])  
     end
